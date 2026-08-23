@@ -2,6 +2,8 @@
 
 Cinemoriq is an AI Creative Operating System for planning campaigns, directing cinematic production, enforcing brand and rights guardrails, and turning campaign inputs into structured briefs.
 
+Live application: [cinemoriq.cinemoriq.workers.dev](https://cinemoriq.cinemoriq.workers.dev)
+
 ## Current product surface
 
 - Premium command-center application shell
@@ -43,6 +45,8 @@ The application is built for the Cloudflare Workers runtime. After authenticatin
 ```bash
 npm run deploy:cloudflare
 ```
+
+The deployment command publishes the canonical Worker at `cinemoriq.cinemoriq.workers.dev` and configures that address as the metadata origin. Update `SITE_ORIGIN` in the deployment command when connecting a custom domain.
 
 For a local Workers-runtime preview:
 
