@@ -441,11 +441,11 @@ export function CinemoriqAppShell() {
 
         <footer className="app-footer">
           <span>© 2026 Cinemoriq. Cinematic intelligence, operationalized.</span>
-          <nav aria-label="Legal links">
-            <a href="#privacy">Privacy</a>
-            <a href="#terms">Terms</a>
-            <a href="#security">Security</a>
-          </nav>
+          <div className="app-footer__trust" aria-label="Product safeguards">
+            <span>Privacy-ready</span>
+            <span>Human-reviewed</span>
+            <span>Secure by design</span>
+          </div>
         </footer>
       </div>
 

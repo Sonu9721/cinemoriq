@@ -1020,17 +1020,15 @@ a {
   letter-spacing: 0.04em;
 }
 
-.app-footer nav {
+.app-footer__trust {
   display: flex;
   gap: var(--space-3);
 }
 
-.app-footer a {
-  transition: color 160ms ease;
-}
-
-.app-footer a:hover {
-  color: var(--color-text);
+.app-footer__trust span + span::before {
+  content: "·";
+  margin-right: var(--space-3);
+  color: var(--color-text-faint);
 }
 
 /* Campaign creation flow */
