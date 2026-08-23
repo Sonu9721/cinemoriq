@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowLeft,
   ArrowRight,
   Check,
   Eye,
@@ -10,23 +11,33 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { CinemoriqMark } from '../brand/cinemoriq-mark';
 import { Button, cx } from '../ui/primitives';
-
-type ObjectiveId = 'sales' | 'leads' | 'launch' | 'awareness';
+import {
+  AudienceStep,
+  BrandStep,
+  ChannelsStep,
+  CreativeDirectionStep,
+  GenerationLoading,
+  GenerationSuccess,
+  GenerateStep,
+  ProductStep,
+} from './campaign-step-panels';
+import {
+  campaignSteps,
+  validateCampaignStep,
+  type CampaignDraft,
+  type ObjectiveId,
+} from './campaign-wizard-model';
+import { useCampaignWizard } from './use-campaign-wizard';
 
 type Objective = {
   id: ObjectiveId;
   title: string;
   description: string;
   icon: LucideIcon;
-};
-
-type CampaignStep = {
-  title: string;
-  description: string;
 };
 
 const objectives: Objective[] = [
@@ -60,57 +71,126 @@ const objectives: Objective[] = [
   },
 ];
 
-const campaignSteps: CampaignStep[] = [
-  { title: 'Intent', description: 'Campaign objective' },
-  { title: 'Audience', description: 'Target demographics' },
-  { title: 'Product', description: "What you're selling" },
-  { title: 'Brand', description: 'Identity & Tone' },
-  { title: 'Channels', description: 'Distribution strategy' },
-  { title: 'Creative Direction', description: 'Visual styling' },
-  { title: 'Generate', description: 'AI synthesis' },
+const stepCopy = [
+  {
+    title: 'Define Campaign Intent',
+    description:
+      'Select the primary objective for this campaign. Our AI models will tune the creative outputs to maximize this specific goal.',
+  },
+  {
+    title: 'Define Target Audience',
+    description:
+      'Give this campaign one clear audience so every message and visual can stay focused.',
+  },
+  {
+    title: 'Define the Offer',
+    description:
+      'Explain what you are promoting, why it matters, and what the audience should do next.',
+  },
+  {
+    title: 'Set Brand Guardrails',
+    description:
+      'Define the voice and boundaries every campaign output must respect.',
+  },
+  {
+    title: 'Choose Campaign Channels',
+    description:
+      'Select where the campaign will appear and identify the placement that matters most.',
+  },
+  {
+    title: 'Direct the Creative',
+    description:
+      'Set the visual language and production boundaries before the brief is created.',
+  },
+  {
+    title: 'Review & Generate Brief',
+    description:
+      'Confirm the inputs below. Cinemoriq will create a campaign brief—not publish or spend media.',
+  },
 ];
 
-function CampaignProgress() {
+const nextStepLabels = [
+  'Audience',
+  'Product',
+  'Brand',
+  'Channels',
+  'Creative Direction',
+  'Review',
+];
+
+function CampaignProgress({
+  currentStep,
+  furthestStep,
+  generated,
+  draft,
+  onNavigate,
+}: {
+  currentStep: number;
+  furthestStep: number;
+  generated: boolean;
+  draft: CampaignDraft;
+  onNavigate: (step: number) => void;
+}) {
   return (
     <>
       <aside className="campaign-progress" aria-label="Campaign creation progress">
         <p className="campaign-progress__eyebrow">Campaign Creation</p>
         <ol className="campaign-progress__list">
-          {campaignSteps.map((step, index) => (
-            <li
-              className={cx(
-                'campaign-progress__step',
-                index === 0 && 'campaign-progress__step--active',
-              )}
-              key={step.title}
-              aria-current={index === 0 ? 'step' : undefined}
-            >
-              <span className="campaign-progress__dot" aria-hidden="true" />
-              <span className="campaign-progress__copy">
-                <strong>
-                  {index + 1}. {step.title}
-                </strong>
-                <span>{step.description}</span>
-              </span>
-            </li>
-          ))}
+          {campaignSteps.map((step, index) => {
+            const active = index === currentStep;
+            const completed =
+              (generated && index === 6) ||
+              (index < furthestStep &&
+                (index === 0 ||
+                  Object.keys(validateCampaignStep(index, draft)).length === 0));
+            const navigable = index <= furthestStep && !active;
+            return (
+              <li
+                className={cx(
+                  'campaign-progress__step',
+                  active && 'campaign-progress__step--active',
+                  completed && 'campaign-progress__step--completed',
+                  navigable && 'campaign-progress__step--navigable',
+                )}
+                key={step.title}
+              >
+                <button
+                  className="campaign-progress__button"
+                  type="button"
+                  aria-current={active ? 'step' : undefined}
+                  disabled={!navigable}
+                  onClick={() => onNavigate(index)}
+                >
+                  <span className="campaign-progress__dot" aria-hidden="true">
+                    {completed ? <Check size={13} strokeWidth={2.6} /> : null}
+                  </span>
+                  <span className="campaign-progress__copy">
+                    <strong>
+                      {index + 1}. {step.title}
+                    </strong>
+                    <span>{step.description}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ol>
       </aside>
 
       <div className="campaign-progress-compact" aria-label="Campaign creation progress">
         <div className="campaign-progress-compact__copy">
-          <span>Step 1 of 7</span>
-          <strong>Intent</strong>
+          <span>Step {currentStep + 1} of 7</span>
+          <strong>{campaignSteps[currentStep].title}</strong>
         </div>
         <div
           className="campaign-progress-compact__track"
           role="progressbar"
           aria-valuemin={1}
           aria-valuemax={7}
-          aria-valuenow={1}
-          aria-label="Campaign creation: step 1 of 7"
+          aria-valuenow={currentStep + 1}
+          aria-label={`Campaign creation: step ${currentStep + 1} of 7`}
         >
-          <span />
+          <span style={{ width: `${((currentStep + 1) / 7) * 100}%` }} />
         </div>
       </div>
     </>
@@ -157,49 +237,132 @@ function ObjectiveCard({
 
 export function CreateCampaignScreen() {
   const router = useRouter();
-  const [selectedObjective, setSelectedObjective] =
-    useState<ObjectiveId>('sales');
-  const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>(
-    'idle',
-  );
-  const [continuing, setContinuing] = useState(false);
-  const [notice, setNotice] = useState('');
-  const saveTimerRef = useRef<number | null>(null);
-  const continueTimerRef = useRef<number | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const errorSummaryRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const {
+    draft,
+    currentStep,
+    furthestStep,
+    errors,
+    saveStatus,
+    transitionStatus,
+    notice,
+    generated,
+    updateField,
+    saveDraft,
+    continueToNextStep,
+    goBack,
+    goToStep,
+    generateBrief,
+    resetWizard,
+    setGenerated,
+  } = useCampaignWizard();
+
+  const errorCount = Object.keys(errors).length;
+  const isTransitioning = transitionStatus !== 'idle';
 
   useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      if (continueTimerRef.current) window.clearTimeout(continueTimerRef.current);
-    };
-  }, []);
+    if (currentStep === 0) return;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.setTimeout(() => headingRef.current?.focus(), 50);
+  }, [currentStep]);
 
-  function saveDraft() {
-    if (savingState === 'saving') return;
-    setSavingState('saving');
-    setNotice('');
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      setSavingState('saved');
-      setNotice('Campaign draft saved.');
-    }, 700);
+  useEffect(() => {
+    if (errorCount === 0) return;
+    window.setTimeout(() => {
+      const firstInvalid = formRef.current?.querySelector<HTMLElement>(
+        '[aria-invalid="true"]',
+      );
+      (firstInvalid ?? errorSummaryRef.current)?.focus();
+    }, 40);
+  }, [errorCount]);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (currentStep === 6) {
+      generateBrief();
+      return;
+    }
+    continueToNextStep();
   }
 
-  function continueToAudience() {
-    if (!selectedObjective || continuing) return;
-    setContinuing(true);
-    setNotice('');
-    if (continueTimerRef.current) window.clearTimeout(continueTimerRef.current);
-    continueTimerRef.current = window.setTimeout(() => {
-      setContinuing(false);
-      setNotice('Intent saved. Audience setup is the next build phase.');
-    }, 850);
+  function saveAndExit() {
+    if (saveDraft()) router.push('/');
   }
+
+  function renderStep() {
+    if (currentStep === 0) {
+      return (
+        <fieldset className="objective-grid">
+          <legend className="sr-only">Choose the primary campaign objective</legend>
+          {objectives.map((objective) => (
+            <ObjectiveCard
+              key={objective.id}
+              objective={objective}
+              selected={draft.objective === objective.id}
+              onSelect={(id) => updateField('objective', id)}
+            />
+          ))}
+        </fieldset>
+      );
+    }
+
+    if (currentStep === 1) {
+      return <AudienceStep draft={draft} errors={errors} updateField={updateField} />;
+    }
+    if (currentStep === 2) {
+      return <ProductStep draft={draft} errors={errors} updateField={updateField} />;
+    }
+    if (currentStep === 3) {
+      return <BrandStep draft={draft} errors={errors} updateField={updateField} />;
+    }
+    if (currentStep === 4) {
+      return <ChannelsStep draft={draft} errors={errors} updateField={updateField} />;
+    }
+    if (currentStep === 5) {
+      return (
+        <CreativeDirectionStep
+          draft={draft}
+          errors={errors}
+          updateField={updateField}
+        />
+      );
+    }
+    return (
+      <GenerateStep
+        draft={draft}
+        errors={errors}
+        updateField={updateField}
+        onEditStep={goToStep}
+      />
+    );
+  }
+
+  const saveLabel =
+    saveStatus === 'saving'
+      ? 'Saving…'
+      : saveStatus === 'saved'
+        ? 'Saved'
+        : saveStatus === 'error'
+          ? 'Save failed'
+          : 'Save Draft';
+
+  const continueLabel =
+    currentStep === 6
+      ? transitionStatus === 'generating'
+        ? 'Generating Brief'
+        : 'Generate Campaign Brief'
+      : currentStep === 5
+        ? 'Review Campaign'
+        : transitionStatus === 'continuing'
+        ? `Preparing ${nextStepLabels[currentStep]}`
+        : `Continue to ${nextStepLabels[currentStep]}`;
 
   return (
     <div className="campaign-wizard-shell">
-      <a className="skip-link" href="#campaign-intent">
-        Skip to campaign intent
+      <a className="skip-link" href="#campaign-step">
+        Skip to campaign setup
       </a>
 
       <header className="campaign-topbar">
@@ -209,7 +372,7 @@ export function CreateCampaignScreen() {
             variant="ghost"
             size="icon"
             aria-label="Close campaign creation"
-            onClick={() => router.push('/')}
+            onClick={saveAndExit}
           >
             <X size={21} strokeWidth={1.6} />
           </Button>
@@ -222,77 +385,136 @@ export function CreateCampaignScreen() {
           className="campaign-save"
           type="button"
           onClick={saveDraft}
-          disabled={savingState === 'saving'}
+          disabled={saveStatus === 'saving'}
         >
-          {savingState === 'saving' ? (
+          {saveStatus === 'saving' ? (
             <span className="campaign-save__loader" aria-hidden="true" />
-          ) : savingState === 'saved' ? (
+          ) : saveStatus === 'saved' ? (
             <Check size={15} aria-hidden="true" />
           ) : null}
-          {savingState === 'saving'
-            ? 'Saving…'
-            : savingState === 'saved'
-              ? 'Saved'
-              : 'Save Draft'}
+          {saveLabel}
         </button>
       </header>
 
       <div className="campaign-wizard-body">
-        <CampaignProgress />
+        <CampaignProgress
+          currentStep={currentStep}
+          furthestStep={furthestStep}
+          generated={generated}
+          draft={draft}
+          onNavigate={goToStep}
+        />
 
-        <main className="campaign-intent" id="campaign-intent">
-          <div className="campaign-intent__inner">
-            <header className="campaign-intent__header">
-              <h1>Define Campaign Intent</h1>
-              <p>
-                Select the primary objective for this campaign. Our AI models will
-                tune the creative outputs to maximize this specific goal.
-              </p>
-            </header>
+        <main
+          className={cx(
+            'campaign-intent',
+            currentStep > 0 && 'campaign-intent--workflow',
+            generated && 'campaign-intent--success',
+          )}
+          id="campaign-step"
+        >
+          <div
+            className={cx(
+              'campaign-intent__inner',
+              currentStep > 0 && 'campaign-intent__inner--workflow',
+            )}
+          >
+            {generated ? (
+              <GenerationSuccess
+                draft={draft}
+                onEdit={() => {
+                  setGenerated(false);
+                  goToStep(6);
+                }}
+                onStartNew={resetWizard}
+                onReturn={() => router.push('/')}
+              />
+            ) : (
+              <>
+                <header className="campaign-intent__header">
+                  <h1 ref={headingRef} tabIndex={-1}>
+                    {stepCopy[currentStep].title}
+                  </h1>
+                  <p>{stepCopy[currentStep].description}</p>
+                </header>
 
-            <fieldset className="objective-grid">
-              <legend className="sr-only">Choose the primary campaign objective</legend>
-              {objectives.map((objective) => (
-                <ObjectiveCard
-                  key={objective.id}
-                  objective={objective}
-                  selected={selectedObjective === objective.id}
-                  onSelect={(id) => {
-                    setSelectedObjective(id);
-                    setNotice('');
-                    setSavingState('idle');
-                  }}
-                />
-              ))}
-            </fieldset>
+                {errorCount > 0 ? (
+                  <div
+                    className="wizard-error-summary"
+                    role="alert"
+                    tabIndex={-1}
+                    ref={errorSummaryRef}
+                  >
+                    <span>{errorCount}</span>
+                    <p>
+                      <strong>Review the highlighted fields.</strong>
+                      <small>Your entered information is still preserved.</small>
+                    </p>
+                  </div>
+                ) : null}
 
-            <footer className="campaign-intent__footer">
-              <Button
-                className="campaign-cancel"
-                variant="ghost"
-                onClick={() => router.push('/')}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="campaign-continue"
-                variant="primary"
-                trailingIcon={
-                  continuing ? (
-                    <span className="campaign-save__loader" aria-hidden="true" />
+                <form
+                  className="campaign-step-form"
+                  onSubmit={handleSubmit}
+                  noValidate
+                  ref={formRef}
+                >
+                  {transitionStatus === 'generating' ? (
+                    <GenerationLoading />
                   ) : (
-                    <ArrowRight size={18} strokeWidth={1.7} />
-                  )
-                }
-                onClick={continueToAudience}
-                disabled={!selectedObjective || continuing}
-              >
-                {continuing ? 'Preparing Audience' : 'Continue to Audience'}
-              </Button>
-            </footer>
-            <p className="campaign-notice" aria-live="polite">
-              {notice}
-            </p>
+                    renderStep()
+                  )}
+
+                  {transitionStatus !== 'generating' ? (
+                    <footer className="campaign-intent__footer">
+                      {currentStep === 0 ? (
+                        <Button
+                          className="campaign-cancel"
+                          variant="ghost"
+                          onClick={saveAndExit}
+                        >
+                          Cancel
+                        </Button>
+                      ) : (
+                        <Button
+                          className="campaign-cancel"
+                          variant="ghost"
+                          leadingIcon={<ArrowLeft size={17} strokeWidth={1.7} />}
+                          onClick={goBack}
+                          disabled={isTransitioning}
+                        >
+                          Back
+                        </Button>
+                      )}
+                      <Button
+                        className="campaign-continue"
+                        variant="primary"
+                        type="submit"
+                        trailingIcon={
+                          isTransitioning ? (
+                            <span className="campaign-save__loader" aria-hidden="true" />
+                          ) : (
+                            <ArrowRight size={18} strokeWidth={1.7} />
+                          )
+                        }
+                        disabled={isTransitioning}
+                      >
+                        {continueLabel}
+                      </Button>
+                    </footer>
+                  ) : null}
+                </form>
+                <p
+                  className={cx(
+                    'campaign-notice',
+                    currentStep > 0 && 'campaign-notice--workflow',
+                  )}
+                  aria-live="polite"
+                >
+                  {notice}
+                </p>
+              </>
+            )}
           </div>
         </main>
       </div>

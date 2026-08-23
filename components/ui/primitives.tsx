@@ -3,6 +3,8 @@ import type {
   HTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
 } from 'react';
 
 export function cx(...classes: Array<string | false | null | undefined>) {
@@ -46,6 +48,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   hint?: string;
   error?: string;
+  fieldClassName?: string;
 }
 
 export function Input({
@@ -54,6 +57,7 @@ export function Input({
   label,
   hint,
   error,
+  fieldClassName,
   ...props
 }: InputProps) {
   const inputId = id ?? props.name;
@@ -64,7 +68,7 @@ export function Input({
       : undefined;
 
   return (
-    <label className="field" htmlFor={inputId}>
+    <label className={cx('field', fieldClassName)} htmlFor={inputId}>
       {label ? <span className="field__label">{label}</span> : null}
       <input
         id={inputId}
@@ -79,6 +83,102 @@ export function Input({
         </span>
       ) : hint ? (
         <span className="field__hint" id={`${inputId}-hint`}>
+          {hint}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label?: string;
+  hint?: string;
+  error?: string;
+  fieldClassName?: string;
+}
+
+export function Select({
+  className,
+  id,
+  label,
+  hint,
+  error,
+  fieldClassName,
+  children,
+  ...props
+}: SelectProps) {
+  const selectId = id ?? props.name;
+  const describedBy = error
+    ? `${selectId}-error`
+    : hint
+      ? `${selectId}-hint`
+      : undefined;
+
+  return (
+    <label className={cx('field', fieldClassName)} htmlFor={selectId}>
+      {label ? <span className="field__label">{label}</span> : null}
+      <select
+        id={selectId}
+        className={cx('input', 'select', Boolean(error) && 'input--error', className)}
+        aria-invalid={Boolean(error)}
+        aria-describedby={describedBy}
+        {...props}
+      >
+        {children}
+      </select>
+      {error ? (
+        <span className="field__error" id={`${selectId}-error`}>
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="field__hint" id={`${selectId}-hint`}>
+          {hint}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+export interface TextareaProps
+  extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string;
+  hint?: string;
+  error?: string;
+  fieldClassName?: string;
+}
+
+export function Textarea({
+  className,
+  id,
+  label,
+  hint,
+  error,
+  fieldClassName,
+  ...props
+}: TextareaProps) {
+  const textareaId = id ?? props.name;
+  const describedBy = error
+    ? `${textareaId}-error`
+    : hint
+      ? `${textareaId}-hint`
+      : undefined;
+
+  return (
+    <label className={cx('field', fieldClassName)} htmlFor={textareaId}>
+      {label ? <span className="field__label">{label}</span> : null}
+      <textarea
+        id={textareaId}
+        className={cx('input', 'textarea', Boolean(error) && 'input--error', className)}
+        aria-invalid={Boolean(error)}
+        aria-describedby={describedBy}
+        {...props}
+      />
+      {error ? (
+        <span className="field__error" id={`${textareaId}-error`}>
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="field__hint" id={`${textareaId}-hint`}>
           {hint}
         </span>
       ) : null}
