@@ -1056,12 +1056,14 @@ export function GenerationSuccess({
   draft,
   onEdit,
   onStartNew,
-  onReturn,
+  onOpenWorkspace,
+  workspaceReady,
 }: {
   draft: CampaignDraft;
   onEdit: () => void;
   onStartNew: () => void;
-  onReturn: () => void;
+  onOpenWorkspace: () => void;
+  workspaceReady: boolean;
 }) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>(
     'idle',
@@ -1196,8 +1198,14 @@ export function GenerationSuccess({
         <Button variant="secondary" onClick={onStartNew}>
           Start new campaign
         </Button>
-        <Button variant="primary" onClick={onReturn}>
-          Back to Command Center
+        <Button
+          variant="primary"
+          onClick={onOpenWorkspace}
+          disabled={!workspaceReady}
+        >
+          {workspaceReady
+            ? 'Open Campaign Workspace'
+            : 'Workspace unavailable'}
         </Button>
       </div>
       <p className="campaign-copy-status" aria-live="polite">

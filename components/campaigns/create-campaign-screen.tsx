@@ -249,6 +249,7 @@ export function CreateCampaignScreen() {
     transitionStatus,
     notice,
     generated,
+    generatedCampaignId,
     updateField,
     saveDraft,
     continueToNextStep,
@@ -427,7 +428,14 @@ export function CreateCampaignScreen() {
                   goToStep(6);
                 }}
                 onStartNew={resetWizard}
-                onReturn={() => router.push('/')}
+                onOpenWorkspace={() => {
+                  if (generatedCampaignId) {
+                    router.push(
+                      `/campaigns/workspace?campaign=${encodeURIComponent(generatedCampaignId)}`,
+                    );
+                  }
+                }}
+                workspaceReady={Boolean(generatedCampaignId)}
               />
             ) : (
               <>

@@ -6,6 +6,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
+import { forwardRef } from 'react';
 
 export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
@@ -21,28 +22,34 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   trailingIcon?: ReactNode;
 }
 
-export function Button({
-  className,
-  variant = 'secondary',
-  size = 'md',
-  leadingIcon,
-  trailingIcon,
-  children,
-  type = 'button',
-  ...props
-}: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cx('button', `button--${variant}`, `button--${size}`, className)}
-      {...props}
-    >
-      {leadingIcon ? <span className="button__icon">{leadingIcon}</span> : null}
-      {children ? <span>{children}</span> : null}
-      {trailingIcon ? <span className="button__icon">{trailingIcon}</span> : null}
-    </button>
-  );
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    {
+      className,
+      variant = 'secondary',
+      size = 'md',
+      leadingIcon,
+      trailingIcon,
+      children,
+      type = 'button',
+      ...props
+    },
+    ref,
+  ) {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={cx('button', `button--${variant}`, `button--${size}`, className)}
+        {...props}
+      >
+        {leadingIcon ? <span className="button__icon">{leadingIcon}</span> : null}
+        {children ? <span>{children}</span> : null}
+        {trailingIcon ? <span className="button__icon">{trailingIcon}</span> : null}
+      </button>
+    );
+  },
+);
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;

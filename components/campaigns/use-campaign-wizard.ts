@@ -5,6 +5,7 @@ import {
   browserCampaignDraftStore,
   createStoredDraft,
 } from './campaign-draft-store';
+import { createAndSaveCampaignRecord } from './campaign-record-store';
 import {
   initialCampaignDraft,
   validateCampaignStep,
@@ -26,6 +27,9 @@ export function useCampaignWizard() {
     useState<TransitionStatus>('idle');
   const [notice, setNotice] = useState('');
   const [generated, setGenerated] = useState(false);
+  const [generatedCampaignId, setGeneratedCampaignId] = useState<string | null>(
+    null,
+  );
   const saveTimerRef = useRef<number | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
   const draftRef = useRef(draft);
@@ -224,10 +228,22 @@ export function useCampaignWizard() {
       window.clearTimeout(transitionTimerRef.current);
     }
     transitionTimerRef.current = window.setTimeout(() => {
-      setGenerated(true);
-      setTransitionStatus('idle');
-      setSaveStatus('saved');
-      setNotice('Campaign brief generated locally and saved on this device.');
+      try {
+        const record = createAndSaveCampaignRecord(draft);
+        setGeneratedCampaignId(record.id);
+        setGenerated(true);
+        setTransitionStatus('idle');
+        setSaveStatus('saved');
+        setNotice(
+          'Campaign brief and workspace record saved locally on this device.',
+        );
+      } catch {
+        setTransitionStatus('idle');
+        setSaveStatus('error');
+        setNotice(
+          'The brief is valid, but this browser could not create its workspace record. Check site storage permissions and try again.',
+        );
+      }
     }, 1800);
     return true;
   }, [draft, transitionStatus, writeDraft]);
@@ -255,6 +271,7 @@ export function useCampaignWizard() {
     setTransitionStatus('idle');
     setNotice('');
     setGenerated(false);
+    setGeneratedCampaignId(null);
     return true;
   }, []);
 
@@ -267,6 +284,7 @@ export function useCampaignWizard() {
     transitionStatus,
     notice,
     generated,
+    generatedCampaignId,
     updateField,
     saveDraft,
     continueToNextStep,

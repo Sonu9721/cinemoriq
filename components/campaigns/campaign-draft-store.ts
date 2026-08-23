@@ -24,7 +24,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
-function sanitizeDraft(value: unknown): CampaignDraft | null {
+export function sanitizeCampaignDraft(value: unknown): CampaignDraft | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Partial<Record<CampaignDraftField, unknown>>;
   const restored: CampaignDraft = { ...initialCampaignDraft };
@@ -163,7 +163,7 @@ export const browserCampaignDraftStore: CampaignDraftStore = {
       if (!raw) return null;
       const parsed = JSON.parse(raw) as Partial<StoredCampaignDraft>;
       if (parsed.schemaVersion !== CAMPAIGN_DRAFT_SCHEMA_VERSION) return null;
-      const draft = sanitizeDraft(parsed.draft);
+      const draft = sanitizeCampaignDraft(parsed.draft);
       if (!draft) return null;
       const currentStep = clampStep(parsed.currentStep);
       const furthestStep = Math.max(

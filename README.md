@@ -8,9 +8,11 @@ Live application: [cinemoriq.cinemoriq.workers.dev](https://cinemoriq.cinemoriq.
 
 - Premium command-center application shell
 - Seven-step campaign creation workflow
+- AI Campaign Workspace with a five-stage production workflow
+- Creative concept preview, production log, pause/resume, and brief details
 - Audience, offer, brand, channel, and creative-direction planning
 - Rights and human-review confirmations
-- On-device draft persistence
+- On-device draft and generated-campaign persistence
 - Responsive desktop, tablet, and mobile experience
 
 ## Technology
@@ -56,11 +58,12 @@ npm run preview:cloudflare
 
 ## Important product status
 
-Campaign drafts currently persist in the active browser only. Cinemoriq does not yet publish campaigns, buy media, or run a remote AI-generation backend. Every generated brief remains a draft and requires human review before release.
+Campaign drafts and workspace records currently persist in the active browser only. The Phase 4 workflow is an honest, deterministic orchestration preview: Cinemoriq does not yet publish campaigns, buy media, or run Kling, Veo, or another remote AI-generation backend. Every generated brief and creative concept requires human review before release.
 
 ## Routes
 
 - `/` — Command Center
 - `/campaigns/new` — Campaign Creation
+- `/campaigns/workspace` — AI Campaign Workspace
 
 Copyright © 2026 Cinemoriq. All rights reserved.
