@@ -492,40 +492,20 @@ a {
 .brand-mark {
   position: relative;
   display: inline-flex;
-  width: 2rem;
-  height: 2rem;
-  flex: 0 0 2rem;
+  width: 2.75rem;
+  height: 2.125rem;
+  flex: 0 0 2.75rem;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid rgb(248 250 252 / 16%);
-  background:
-    linear-gradient(135deg, rgb(248 250 252 / 14%), transparent 55%),
-    var(--color-surface-container);
-  color: #f4f0e6;
+  border: 0;
+  background: transparent;
 }
 
-.brand-mark::after {
-  position: absolute;
-  width: 1px;
-  height: 3.5rem;
-  transform: rotate(42deg);
-  background: rgb(248 250 252 / 20%);
-  content: '';
-}
-
-.brand-mark__c {
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: -0.12em;
-}
-
-.brand-mark__spark {
-  position: absolute;
-  right: 0.25rem;
-  top: 0.25rem;
-  color: var(--color-primary-soft);
-  font-size: 0.34rem;
+.brand-mark__image {
+  display: block;
+  object-fit: contain;
+  object-position: center;
 }
 
 .sidebar__brand-copy {
@@ -1760,21 +1740,9 @@ a {
 }
 
 .brand-mark--campaign {
-  width: 1.5rem;
-  height: 1.5rem;
-  flex-basis: 1.5rem;
-  opacity: 0.8;
-  filter: grayscale(1);
-}
-
-.brand-mark--campaign .brand-mark__c {
-  font-size: 0.7rem;
-}
-
-.brand-mark--campaign .brand-mark__spark {
-  right: 0.18rem;
-  top: 0.18rem;
-  font-size: 0.26rem;
+  width: 2.25rem;
+  height: 1.75rem;
+  flex-basis: 2.25rem;
 }
 
 .campaign-save {
@@ -2559,9 +2527,9 @@ a {
 }
 
 .brand-mark--profile {
-  width: 2.5rem;
-  height: 2.5rem;
-  flex-basis: 2.5rem;
+  width: 2.75rem;
+  height: 2.125rem;
+  flex-basis: 2.75rem;
 }
 
 .brand-profile-preview > span:nth-child(2) {
@@ -3091,6 +3059,12 @@ a {
 
   .sidebar--mobile-open {
     transform: translateX(0);
+  }
+
+  .sidebar .brand-mark {
+    width: 3rem;
+    height: 2.3125rem;
+    flex-basis: 3rem;
   }
 
   .sidebar__mobile-close,
