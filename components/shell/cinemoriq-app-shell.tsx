@@ -33,6 +33,8 @@ import {
   type FormEvent,
   type RefObject,
 } from 'react';
+import { useRouter } from 'next/navigation';
+import { CinemoriqMark } from '../brand/cinemoriq-mark';
 import { Button, Card, Input, Skeleton, StatusBadge, cx } from '../ui/primitives';
 import { Drawer, Modal } from '../ui/overlays';
 
@@ -61,15 +63,6 @@ const quickActions = [
   'Repurpose content',
   'Optimize my ads',
 ];
-
-function BrandMark() {
-  return (
-    <span className="brand-mark" aria-hidden="true">
-      <span className="brand-mark__c">C</span>
-      <span className="brand-mark__spark">◆</span>
-    </span>
-  );
-}
 
 function SidebarLink({
   item,
@@ -113,7 +106,7 @@ function Sidebar({
       />
       <aside className={cx('sidebar', mobileOpen && 'sidebar--mobile-open')}>
         <div className="sidebar__brand">
-          <BrandMark />
+          <CinemoriqMark />
           <div className="sidebar__brand-copy">
             <strong>Cinemoriq</strong>
             <span>Creative Director</span>
@@ -197,6 +190,7 @@ function CommandBar({
 }
 
 export function CinemoriqAppShell() {
+  const router = useRouter();
   const [activeNav, setActiveNav] = useState('Command Center');
   const [workspace, setWorkspace] = useState('Workspace Alpha');
   const [command, setCommand] = useState('');
@@ -231,6 +225,10 @@ export function CinemoriqAppShell() {
   }, []);
 
   function handleNavSelect(label: string) {
+    if (label === 'Campaigns') {
+      router.push('/campaigns/new');
+      return;
+    }
     setActiveNav(label);
     setSidebarOpen(false);
   }
@@ -464,7 +462,7 @@ export function CinemoriqAppShell() {
             <Button
               variant="primary"
               leadingIcon={<Sparkles size={16} />}
-              onClick={closeCampaignModal}
+              onClick={() => router.push('/campaigns/new')}
             >
               Create brief
             </Button>
