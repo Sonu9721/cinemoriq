@@ -16,6 +16,7 @@ import {
   type StudioGenerationConfig,
   type StudioVideoModelKey,
 } from './video-model-catalog';
+import type { GenerationOutputMetadata } from '../../lib/generation-contract';
 
 type StudioCollection = {
   schemaVersion: number;
@@ -126,9 +127,14 @@ function sanitizeVersion(value: unknown): StudioVersion | null {
   )
     ? (version.generationState as StudioGenerationState)
     : 'idle';
-  const generationState = ['queued', 'generating'].includes(persistedGeneration)
-    ? 'cancelled'
-    : persistedGeneration;
+  const generationJobId =
+    typeof version.generationJobId === 'string' && version.generationJobId.length <= 100
+      ? version.generationJobId
+      : null;
+  const generationState =
+    ['queued', 'generating'].includes(persistedGeneration) && !generationJobId
+      ? 'cancelled'
+      : persistedGeneration;
   const approvalState = approvalStates.includes(
     version.approvalState as StudioApprovalState,
   )
@@ -146,6 +152,7 @@ function sanitizeVersion(value: unknown): StudioVersion | null {
       typeof version.mediaSrc === 'string' && version.mediaSrc.startsWith('/')
         ? version.mediaSrc
         : null,
+    mediaType: version.mediaType === 'video' ? 'video' : 'image',
     mediaAlt:
       typeof version.mediaAlt === 'string' ? version.mediaAlt.slice(0, 220) : '',
     illustrative: Boolean(version.illustrative),
@@ -154,6 +161,19 @@ function sanitizeVersion(value: unknown): StudioVersion | null {
       generationState === 'ready'
         ? 100
         : finiteNumber(version.generationProgress, 0, 0, 100),
+    generationJobId,
+    submissionKey:
+      typeof version.submissionKey === 'string' && version.submissionKey.length <= 128
+        ? version.submissionKey
+        : null,
+    generationError:
+      typeof version.generationError === 'string'
+        ? version.generationError.slice(0, 500)
+        : null,
+    outputMetadata:
+      version.outputMetadata && typeof version.outputMetadata === 'object'
+        ? (version.outputMetadata as GenerationOutputMetadata)
+        : null,
     approvalState,
     reviewedAt:
       typeof version.reviewedAt === 'string' &&
@@ -223,7 +243,7 @@ function sanitizeSession(value: unknown): StudioSession | null {
   if (!value || typeof value !== 'object') return null;
   const session = value as Partial<StudioSession>;
   if (
-    ![1, STUDIO_SESSION_SCHEMA_VERSION].includes(session.schemaVersion ?? -1) ||
+    ![1, 2, STUDIO_SESSION_SCHEMA_VERSION].includes(session.schemaVersion ?? -1) ||
     typeof session.campaignId !== 'string' ||
     !session.campaignId ||
     !Array.isArray(session.scenes)
@@ -276,7 +296,7 @@ function loadCollection(): StudioCollection {
       return { schemaVersion: STUDIO_SESSION_SCHEMA_VERSION, sessions: [] };
     }
     const parsed = JSON.parse(raw) as Partial<StudioCollection>;
-    if (![1, STUDIO_SESSION_SCHEMA_VERSION].includes(parsed.schemaVersion ?? -1)) {
+    if (![1, 2, STUDIO_SESSION_SCHEMA_VERSION].includes(parsed.schemaVersion ?? -1)) {
       return { schemaVersion: STUDIO_SESSION_SCHEMA_VERSION, sessions: [] };
     }
     return {

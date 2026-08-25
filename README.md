@@ -2,7 +2,7 @@
 
 Cinemoriq is an AI Creative Operating System for planning campaigns, directing cinematic production, enforcing brand and rights guardrails, and turning campaign inputs into structured briefs.
 
-Live application: [cinemoriq.cinemoriq.workers.dev](https://cinemoriq.cinemoriq.workers.dev)
+Private live application: [Cinemoriq Sites](https://cinemoriq-os.plum-jay-8118.chatgpt.site)
 
 ## Current product surface
 
@@ -11,8 +11,11 @@ Live application: [cinemoriq.cinemoriq.workers.dev](https://cinemoriq.cinemoriq.
 - AI Campaign Workspace with a five-stage production workflow
 - Creative concept preview, production log, pause/resume, and brief details
 - AI Creative Studio with scene and version selection, a cinematic preview player,
-  an interactive timeline, local generation-state simulation, and explicit human
-  approval states
+  an interactive timeline, real provider job orchestration, private output storage,
+  resumable polling, and explicit human approval states
+- Model-aware generation through fal.ai for Veo 3.1, Kling 3 Standard,
+  Seedance 2.0, and MiniMax H3
+- Optional MiniMax Direct connection for the legacy Hailuo 02 API model
 - Audience, offer, brand, channel, and creative-direction planning
 - Rights and human-review confirmations
 - On-device draft and generated-campaign persistence
@@ -25,6 +28,7 @@ Live application: [cinemoriq.cinemoriq.workers.dev](https://cinemoriq.cinemoriq.
 - Vinext and Vite
 - TypeScript
 - Cloudflare Workers runtime
+- Cloudflare D1 job records and private R2 video storage
 - Plus Jakarta Sans and Lucide icons
 
 ## Run locally
@@ -42,6 +46,18 @@ Production checks:
 npm run lint
 npm run build
 ```
+
+## Provider configuration
+
+Real generation is enabled only when the matching server-side secret exists:
+
+- `FAL_KEY` for Veo, Kling, Seedance, and MiniMax H3 through fal.ai
+- `MINIMAX_API_KEY` for MiniMax Hailuo 02 Direct
+
+Keys are never sent to the browser. Hailuo consumer-site welcome credits are
+separate from MiniMax Open Platform API billing and cannot power this backend.
+The current deployment must remain owner-only because generation jobs and private
+media are intentionally scoped to this one-person operating system.
 
 ## Cloudflare deployment
 
@@ -61,7 +77,7 @@ npm run preview:cloudflare
 
 ## Important product status
 
-Campaign drafts, workspace records, and Studio sessions currently persist in the active browser only. The Phase 4 and Phase 5 workflows are honest, deterministic orchestration previews: Cinemoriq does not yet publish campaigns, buy media, export video, or run Kling, Veo, Seedance, or another remote AI-generation backend. Studio model choices are local presets, generated variants are simulated workflow states, and every scene version requires explicit human review before release.
+Campaign drafts, workspace records, and editable Studio scene sessions still persist in the active browser. Paid generation jobs, provider request state, completed video files, and reviews for real outputs persist durably in D1/R2. Cinemoriq does not yet publish campaigns, buy media, or export a final campaign package. Provider renders remain disabled until the corresponding hosted secret is configured, and every completed scene stays in human review until explicitly approved.
 
 ## Routes
 
@@ -69,5 +85,6 @@ Campaign drafts, workspace records, and Studio sessions currently persist in the
 - `/campaigns/new` — Campaign Creation
 - `/campaigns/workspace` — AI Campaign Workspace
 - `/studio` — AI Creative Studio (open from a specific campaign workspace)
+- `/settings` — Secure provider connection status
 
 Copyright © 2026 Cinemoriq. All rights reserved.

@@ -29,6 +29,11 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import type {
+  ConnectionStatusResponse,
+  GenerationApiError,
+  GenerationJobResponse,
+} from '../../lib/generation-contract';
 import {
   DEMO_CAMPAIGN_ID,
   type CampaignRecord,
@@ -60,6 +65,7 @@ import {
 import { loadStudioSession, saveStudioSession } from './studio-store';
 import { ModelAwareGenerationControls } from './model-aware-controls';
 import {
+  estimateGenerationCost,
   getResolutionLabel,
   getVideoModel,
   validateGenerationConfig,
@@ -111,16 +117,16 @@ function versionStatus(version: StudioVersion): {
   tone: BadgeTone;
 } {
   if (version.generationState === 'queued') {
-    return { label: 'Queued locally', tone: 'blue' };
+    return { label: 'Queued', tone: 'blue' };
   }
   if (version.generationState === 'generating') {
-    return { label: `Simulating · ${version.generationProgress}%`, tone: 'blue' };
+    return { label: `Generating · ${version.generationProgress}%`, tone: 'blue' };
   }
   if (version.generationState === 'failed') {
-    return { label: 'Simulation failed', tone: 'danger' };
+    return { label: 'Generation failed', tone: 'danger' };
   }
   if (version.generationState === 'cancelled') {
-    return { label: 'Simulation cancelled', tone: 'warning' };
+    return { label: 'Generation cancelled', tone: 'warning' };
   }
   const approvalLabels: Record<
     StudioApprovalState,
@@ -132,6 +138,27 @@ function versionStatus(version: StudioVersion): {
     'changes-requested': { label: 'Changes requested', tone: 'warning' },
   };
   return approvalLabels[version.approvalState];
+}
+
+const EMPTY_CONNECTION_STATUS: ConnectionStatusResponse = {
+  fal: { configured: false },
+  minimax: { configured: false },
+  database: { configured: false },
+  mediaStorage: { configured: false },
+};
+
+async function readGenerationResponse(response: Response) {
+  const payload = (await response.json().catch(() => null)) as
+    | GenerationJobResponse
+    | GenerationApiError
+    | null;
+  if (!response.ok || !payload || !('job' in payload)) {
+    const message = payload && 'error' in payload
+      ? payload.error.message
+      : 'Cinemoriq could not complete the generation request.';
+    throw new Error(message);
+  }
+  return payload;
 }
 
 function StudioSkeleton() {
@@ -330,7 +357,17 @@ function StudioPreview({
   return (
     <section className="studio-player" aria-labelledby="studio-preview-title">
       <div className="studio-player__frame">
-        {version.mediaSrc && !broken ? (
+        {version.mediaSrc && !broken && version.mediaType === 'video' ? (
+          <video
+            className="studio-player__video"
+            src={version.mediaSrc}
+            controls
+            playsInline
+            preload="metadata"
+            aria-label={version.mediaAlt}
+            onError={onImageError}
+          />
+        ) : version.mediaSrc && !broken ? (
           <Image
             src={version.mediaSrc}
             alt={version.mediaAlt}
@@ -364,13 +401,15 @@ function StudioPreview({
           </div>
         </div>
 
-        <button
-          className="studio-player__play"
-          aria-label={playing ? 'Pause local preview' : 'Play local preview'}
-          onClick={onTogglePlay}
-        >
-          {playing ? <Pause size={24} fill="currentColor" /> : <Play size={25} fill="currentColor" />}
-        </button>
+        {version.mediaType !== 'video' ? (
+          <button
+            className="studio-player__play"
+            aria-label={playing ? 'Pause local preview' : 'Play local preview'}
+            onClick={onTogglePlay}
+          >
+            {playing ? <Pause size={24} fill="currentColor" /> : <Play size={25} fill="currentColor" />}
+          </button>
+        ) : null}
 
         {activeGeneration ? (
           <div className="studio-generation-overlay" aria-live="polite">
@@ -379,7 +418,7 @@ function StudioPreview({
             <div
               className="studio-generation-progress"
               role="progressbar"
-              aria-label="Local generation simulation progress"
+              aria-label="Video generation progress"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={version.generationProgress}
@@ -393,7 +432,9 @@ function StudioPreview({
           <p className="workspace-eyebrow" id="studio-preview-title">
             {version.illustrative
               ? 'Illustrative concept still · not model output'
-              : 'Scene preview'}
+              : version.mediaType === 'video'
+                ? 'Stored provider output · private media'
+                : 'Scene preview'}
           </p>
           <strong>{scene.title}</strong>
           <span>{scene.description}</span>
@@ -567,6 +608,8 @@ function AIDirectorPanel({
   version,
   campaignPaused,
   guardrailsReady,
+  providerReady,
+  backendReady,
   onUpdateScene,
   onGenerate,
   onCancel,
@@ -578,10 +621,12 @@ function AIDirectorPanel({
   version: StudioVersion;
   campaignPaused: boolean;
   guardrailsReady: boolean;
+  providerReady: boolean;
+  backendReady: boolean;
   onUpdateScene: (patch: Partial<StudioScene>) => void;
-  onGenerate: (retryCurrent?: boolean) => void;
-  onCancel: () => void;
-  onRequestChanges: () => void;
+  onGenerate: (retryCurrent?: boolean) => void | Promise<void>;
+  onCancel: () => void | Promise<void>;
+  onRequestChanges: () => void | Promise<void>;
   onApprove: () => void;
 }) {
   const running = ['queued', 'generating'].includes(version.generationState);
@@ -599,11 +644,18 @@ function AIDirectorPanel({
     <div className="studio-director-content">
       <div className="studio-panel-heading studio-director-heading">
         <div>
-          <p className="workspace-eyebrow">Local production controls</p>
+          <p className="workspace-eyebrow">Production controls</p>
           <h2><WandSparkles size={19} /> AI Director</h2>
         </div>
-        <StatusBadge tone={running ? 'blue' : 'neutral'} pulse={running}>
-          {running ? 'Simulating' : 'Catalog ready'}
+        <StatusBadge
+          tone={running ? 'blue' : providerReady && backendReady ? 'success' : 'warning'}
+          pulse={running}
+        >
+          {running
+            ? 'Generating'
+            : providerReady && backendReady
+              ? 'Connected'
+              : 'Connection required'}
         </StatusBadge>
       </div>
 
@@ -699,30 +751,40 @@ function AIDirectorPanel({
             This campaign is paused. Resume it in the campaign workspace to edit or
             review scenes.
           </p>
+        ) : !backendReady ? (
+          <p className="studio-lock-notice" role="alert">
+            Durable generation storage is not available yet. Refresh after the
+            Cinemoriq backend is deployed.
+          </p>
+        ) : !providerReady ? (
+          <p className="studio-lock-notice" role="alert">
+            Connect this model&apos;s server key in Settings before starting a paid
+            generation.
+          </p>
         ) : null}
       </div>
 
       <div className="studio-director-actions">
         {running ? (
-          <Button variant="secondary" size="lg" leadingIcon={<X size={17} />} onClick={onCancel}>
-            Cancel local simulation
+          <Button variant="secondary" size="lg" leadingIcon={<X size={17} />} onClick={() => void onCancel()}>
+            Cancel generation
           </Button>
         ) : (
           <Button
             variant="primary"
             size="lg"
             leadingIcon={<Sparkles size={17} />}
-            disabled={locked || generationErrors.length > 0}
+            disabled={locked || !providerReady || !backendReady || generationErrors.length > 0}
             onClick={() =>
-              onGenerate(
+              void onGenerate(
                 version.generationState === 'failed' ||
                   version.generationState === 'cancelled',
               )
             }
           >
             {version.generationState === 'failed' || version.generationState === 'cancelled'
-              ? 'Retry local simulation'
-              : 'Generate local variant'}
+              ? 'Retry generation'
+              : 'Generate variant'}
           </Button>
         )}
         <div>
@@ -730,7 +792,7 @@ function AIDirectorPanel({
             variant="secondary"
             leadingIcon={<RotateCcw size={16} />}
             disabled={!canReview}
-            onClick={onRequestChanges}
+            onClick={() => void onRequestChanges()}
           >
             Request changes
           </Button>
@@ -761,18 +823,33 @@ export function CreativeStudioScreen() {
   const [directorOpen, setDirectorOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [brokenMedia, setBrokenMedia] = useState<Set<string>>(new Set());
-  const queueTimerRef = useRef<number | null>(null);
-  const progressTimerRef = useRef<number | null>(null);
+  const [connections, setConnections] = useState<ConnectionStatusResponse>(
+    EMPTY_CONNECTION_STATUS,
+  );
+  const pollTimersRef = useRef<Map<string, number>>(new Map());
   const generationLockRef = useRef(false);
   const hydratedRef = useRef(false);
   const playbackDuration = session ? getStudioDuration(session) : 0;
   const playbackCampaignId = session?.campaignId;
 
-  const clearGenerationTimers = useCallback(() => {
-    if (queueTimerRef.current !== null) window.clearTimeout(queueTimerRef.current);
-    if (progressTimerRef.current !== null) window.clearInterval(progressTimerRef.current);
-    queueTimerRef.current = null;
-    progressTimerRef.current = null;
+  const clearGenerationPolling = useCallback(() => {
+    pollTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    pollTimersRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/connections/status', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (active) setConnections(payload as ConnectionStatusResponse);
+      })
+      .catch(() => {
+        if (active) setConnections(EMPTY_CONNECTION_STATUS);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -839,10 +916,10 @@ export function CreativeStudioScreen() {
 
   useEffect(() => {
     return () => {
-      clearGenerationTimers();
+      clearGenerationPolling();
       generationLockRef.current = false;
     };
-  }, [clearGenerationTimers]);
+  }, [clearGenerationPolling]);
 
   const scene = useMemo(
     () =>
@@ -863,6 +940,14 @@ export function CreativeStudioScreen() {
       (item) => selectedVersion(item).approvalState === 'approved',
     ),
   );
+  const activeModel = scene ? getVideoModel(scene.generationConfig.modelKey) : null;
+  const backendReady =
+    connections.database.configured && connections.mediaStorage.configured;
+  const providerReady = activeModel
+    ? activeModel.provider === 'fal-ai'
+      ? connections.fal.configured
+      : connections.minimax.configured
+    : false;
 
   const updateVersion = useCallback(
     (
@@ -889,6 +974,109 @@ export function CreativeStudioScreen() {
     },
     [],
   );
+
+  const applyGenerationJob = useCallback(
+    (sceneId: string, versionId: string, response: GenerationJobResponse) => {
+      const { job } = response;
+      updateVersion(sceneId, versionId, (current) => ({
+        ...current,
+        mediaSrc: job.mediaUrl ?? current.mediaSrc,
+        mediaType: job.mediaUrl ? 'video' : current.mediaType,
+        illustrative: false,
+        generationState:
+          job.status === 'succeeded'
+            ? 'ready'
+            : job.status === 'failed'
+              ? 'failed'
+              : job.status === 'cancelled'
+                ? 'cancelled'
+                : job.status === 'submitting' || job.status === 'queued'
+                  ? 'queued'
+                  : 'generating',
+        generationProgress: job.progress,
+        generationJobId: job.id,
+        generationError: job.error,
+        outputMetadata: job.output,
+        approvalState: job.reviewState,
+        reviewedAt: job.reviewedAt,
+      }));
+      if (job.mediaUrl) {
+        setBrokenMedia((current) => {
+          const next = new Set(current);
+          next.delete(versionId);
+          return next;
+        });
+      }
+    },
+    [updateVersion],
+  );
+
+  type PollScheduler = (
+    sceneId: string,
+    versionId: string,
+    jobId: string,
+    delayMs: number,
+  ) => void;
+  const schedulePollRef = useRef<PollScheduler>(() => undefined);
+  const scheduleGenerationPoll = useCallback<PollScheduler>(
+    (sceneId, versionId, jobId, delayMs) => {
+      if (pollTimersRef.current.has(jobId)) return;
+      const effectiveDelay = document.hidden ? Math.max(15_000, delayMs) : delayMs;
+      const timer = window.setTimeout(async () => {
+        pollTimersRef.current.delete(jobId);
+        try {
+          const response = await readGenerationResponse(
+            await fetch(`/api/studio/generations/${encodeURIComponent(jobId)}`, {
+              cache: 'no-store',
+            }),
+          );
+          applyGenerationJob(sceneId, versionId, response);
+          if (!['succeeded', 'failed', 'cancelled'].includes(response.job.status)) {
+            schedulePollRef.current(
+              sceneId,
+              versionId,
+              jobId,
+              response.pollAfterMs || 5_000,
+            );
+          } else if (response.job.status === 'succeeded') {
+            setNotice('Provider video stored privately and ready for human review.');
+          } else {
+            setNotice(response.job.error ?? 'Generation stopped before completion.');
+          }
+        } catch (error) {
+          setNotice(
+            `${error instanceof Error ? error.message : 'Status refresh failed.'} The job will keep polling safely.`,
+          );
+          schedulePollRef.current(sceneId, versionId, jobId, 10_000);
+        }
+      }, Math.max(250, effectiveDelay));
+      pollTimersRef.current.set(jobId, timer);
+    },
+    [applyGenerationJob],
+  );
+
+  useEffect(() => {
+    schedulePollRef.current = scheduleGenerationPoll;
+  }, [scheduleGenerationPoll]);
+
+  useEffect(() => {
+    if (loadState !== 'ready' || !session) return;
+    session.scenes.forEach((item) => {
+      item.versions.forEach((candidate) => {
+        if (
+          candidate.generationJobId &&
+          ['queued', 'generating'].includes(candidate.generationState)
+        ) {
+          schedulePollRef.current(
+            item.id,
+            candidate.id,
+            candidate.generationJobId,
+            500,
+          );
+        }
+      });
+    });
+  }, [loadState, session]);
 
   function selectScene(sceneId: string) {
     setSession((current) =>
@@ -956,108 +1144,188 @@ export function CreativeStudioScreen() {
     setPlaying((current) => !current);
   }
 
-  function startGeneration(retryCurrent = false) {
+  async function startGeneration(retryCurrent = false) {
     if (
       !scene ||
       !version ||
+      !session ||
       record?.paused ||
       !guardrailsReady ||
       generationLockRef.current
     ) {
       return;
     }
-    generationLockRef.current = true;
-    clearGenerationTimers();
-    const sceneId = scene.id;
-    let targetVersionId = version.id;
-
-    if (retryCurrent) {
-      updateVersion(sceneId, targetVersionId, (current) => ({
-        ...current,
-        generationState: 'queued',
-        generationProgress: 0,
-        approvalState: 'draft',
-        reviewedAt: null,
-      }));
-    } else {
-      const versionNumber = Math.max(...scene.versions.map((item) => item.number)) + 1;
-      targetVersionId = `${scene.id}-v${versionNumber}`;
-      const nextVersion: StudioVersion = {
-        id: targetVersionId,
-        number: versionNumber,
-        createdAt: new Date().toISOString(),
-        mediaSrc: version.mediaSrc,
-        mediaAlt: version.mediaAlt,
-        illustrative: true,
-        generationState: 'queued',
-        generationProgress: 0,
-        approvalState: 'draft',
-        reviewedAt: null,
-      };
-      setSession((current) =>
-        current
-          ? {
-              ...current,
-              scenes: current.scenes.map((item) =>
-                item.id === sceneId
-                  ? {
-                      ...item,
-                      selectedVersionId: targetVersionId,
-                      versions: [...item.versions, nextVersion].slice(-12),
-                    }
-                  : item,
-              ),
-            }
-          : current,
-      );
-    }
     const selectedModel = getVideoModel(scene.generationConfig.modelKey);
-    setNotice(
-      `Local workflow simulation queued for ${selectedModel.name}. No paid ${selectedModel.providerLabel} request was sent.`,
+    const providerReady =
+      selectedModel.provider === 'fal-ai'
+        ? connections.fal.configured
+        : connections.minimax.configured;
+    if (!providerReady || !connections.database.configured || !connections.mediaStorage.configured) {
+      setNotice('Connect the selected provider and generation storage before starting a paid render.');
+      return;
+    }
+    const estimate = estimateGenerationCost(scene.generationConfig).amount;
+    if (estimate === null) {
+      setNotice('Choose a fixed duration so Cinemoriq can enforce a maximum paid cost.');
+      return;
+    }
+    generationLockRef.current = true;
+    const sceneId = scene.id;
+    const resumeUnconfirmedSubmission = Boolean(
+      retryCurrent && version.submissionKey && !version.generationJobId,
     );
-
-    queueTimerRef.current = window.setTimeout(() => {
+    const versionNumber = resumeUnconfirmedSubmission
+      ? version.number
+      : Math.max(...scene.versions.map((item) => item.number)) + 1;
+    const targetVersionId = resumeUnconfirmedSubmission
+      ? version.id
+      : `${scene.id}-v${versionNumber}`;
+    const submissionKey = resumeUnconfirmedSubmission
+      ? (version.submissionKey as string)
+      : crypto.randomUUID();
+    const nextVersion: StudioVersion = {
+      id: targetVersionId,
+      number: versionNumber,
+      createdAt: new Date().toISOString(),
+      mediaSrc: null,
+      mediaType: 'video',
+      mediaAlt: `${scene.title} generated video, version ${versionNumber}`,
+      illustrative: false,
+      generationState: 'queued',
+      generationProgress: 0,
+      generationJobId: null,
+      submissionKey,
+      generationError: null,
+      outputMetadata: null,
+      approvalState: 'draft',
+      reviewedAt: null,
+    };
+    const nextSession: StudioSession = {
+      ...session,
+      scenes: session.scenes.map((item) =>
+        item.id === sceneId
+          ? {
+              ...item,
+              selectedVersionId: targetVersionId,
+              versions: resumeUnconfirmedSubmission
+                ? item.versions.map((candidate) =>
+                    candidate.id === targetVersionId
+                      ? {
+                          ...candidate,
+                          generationState: 'queued',
+                          generationProgress: 0,
+                          generationError: null,
+                          approvalState: 'draft',
+                          reviewedAt: null,
+                        }
+                      : candidate,
+                  )
+                : [...item.versions, nextVersion].slice(-12),
+            }
+          : item,
+      ),
+    };
+    try {
+      const persistedSession = saveStudioSession(nextSession);
+      setSession(persistedSession);
+    } catch {
+      generationLockRef.current = false;
+      setNotice(
+        'Generation was not submitted because its duplicate-billing protection could not be saved in this browser.',
+      );
+      return;
+    }
+    setNotice(`Submitting ${selectedModel.name} generation with a $${estimate.toFixed(2)} estimate…`);
+    try {
+      const response = await readGenerationResponse(
+        await fetch('/api/studio/generations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': submissionKey,
+          },
+          body: JSON.stringify({
+            campaignId: session?.campaignId,
+            sceneId,
+            versionId: targetVersionId,
+            prompt: scene.prompt,
+            config: scene.generationConfig,
+            confirmations: {
+              assetRights: Boolean(record?.draft.confirmAssetRights),
+              noUnauthorizedIdentity: Boolean(record?.draft.confirmNoUnauthorizedIdentity),
+              humanReview: Boolean(record?.draft.confirmHumanReview),
+            },
+            maximumCostUsd: Math.min(10, Math.max(estimate + 0.5, estimate * 1.2)),
+          }),
+        }),
+      );
+      applyGenerationJob(sceneId, targetVersionId, response);
+      if (!['succeeded', 'failed', 'cancelled'].includes(response.job.status)) {
+        schedulePollRef.current(
+          sceneId,
+          targetVersionId,
+          response.job.id,
+          response.pollAfterMs || 2_000,
+        );
+        setNotice(`${selectedModel.name} job accepted. You can refresh safely; polling will resume.`);
+      } else if (response.job.status === 'failed') {
+        setNotice(response.job.error ?? 'Provider submission failed. No automatic retry was made.');
+      }
+    } catch (error) {
       updateVersion(sceneId, targetVersionId, (current) => ({
         ...current,
-        generationState: 'generating',
-        generationProgress: 8,
+        generationState: 'failed',
+        generationError: error instanceof Error ? error.message : 'Generation submission failed.',
       }));
-      let simulatedProgress = 8;
-      progressTimerRef.current = window.setInterval(() => {
-        simulatedProgress = Math.min(100, simulatedProgress + 8);
-        const complete = simulatedProgress >= 100;
-        updateVersion(sceneId, targetVersionId, (current) => {
-          return {
-            ...current,
-            generationState: complete ? 'ready' : 'generating',
-            generationProgress: simulatedProgress,
-            approvalState: complete ? 'in-review' : current.approvalState,
-          };
-        });
-        if (complete) {
-          clearGenerationTimers();
-          generationLockRef.current = false;
-          setNotice(
-            'Local orchestration preview is ready for human review. No external media was generated.',
-          );
-        }
-      }, 180);
-    }, 420);
+      setNotice(error instanceof Error ? error.message : 'Generation submission failed.');
+    } finally {
+      generationLockRef.current = false;
+    }
   }
 
-  function cancelGeneration() {
+  async function cancelGeneration() {
     if (!scene || !version) return;
-    clearGenerationTimers();
-    generationLockRef.current = false;
-    updateVersion(scene.id, version.id, (current) => ({
-      ...current,
-      generationState: 'cancelled',
-      approvalState: 'draft',
-    }));
-    setNotice('Local generation simulation cancelled. No external job was running.');
+    if (!version.generationJobId) {
+      updateVersion(scene.id, version.id, (current) => ({
+        ...current,
+        generationState: 'cancelled',
+        approvalState: 'draft',
+      }));
+      return;
+    }
+    try {
+      const response = await readGenerationResponse(
+        await fetch(
+          `/api/studio/generations/${encodeURIComponent(version.generationJobId)}/cancel`,
+          { method: 'POST' },
+        ),
+      );
+      const timer = pollTimersRef.current.get(version.generationJobId);
+      if (timer !== undefined) window.clearTimeout(timer);
+      pollTimersRef.current.delete(version.generationJobId);
+      applyGenerationJob(scene.id, version.id, response);
+      if (response.job.status === 'cancelled') {
+        setNotice('Provider confirmed the cancellation.');
+      } else if (response.job.status === 'succeeded') {
+        setNotice('The provider finished before cancellation; the paid output was preserved.');
+      } else {
+        schedulePollRef.current(
+          scene.id,
+          version.id,
+          version.generationJobId,
+          response.pollAfterMs || 1_000,
+        );
+        setNotice(
+          response.job.error ??
+            'Cancellation requested. Cinemoriq will keep monitoring until fal.ai confirms the final state.',
+        );
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'This provider job could not be cancelled.');
+    }
   }
 
-  function requestChanges() {
+  async function requestChanges() {
     if (
       !scene ||
       !version ||
@@ -1067,25 +1335,67 @@ export function CreativeStudioScreen() {
     ) {
       return;
     }
-    updateVersion(scene.id, version.id, (current) => ({
-      ...current,
-      approvalState: 'changes-requested',
-      reviewedAt: new Date().toISOString(),
-    }));
+    if (version.generationJobId) {
+      try {
+        const response = await readGenerationResponse(
+          await fetch(
+            `/api/studio/generations/${encodeURIComponent(version.generationJobId)}/review`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ state: 'changes-requested' }),
+            },
+          ),
+        );
+        applyGenerationJob(scene.id, version.id, response);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'Review could not be recorded.');
+        return;
+      }
+    } else {
+      updateVersion(scene.id, version.id, (current) => ({
+        ...current,
+        approvalState: 'changes-requested',
+        reviewedAt: new Date().toISOString(),
+      }));
+    }
     setNotice(`Changes requested for ${scene.title}, version ${version.number}.`);
   }
 
-  function confirmApproval() {
+  async function confirmApproval() {
     if (!scene || !version || version.generationState !== 'ready' || record?.paused) {
       return;
     }
-    updateVersion(scene.id, version.id, (current) => ({
-      ...current,
-      approvalState: 'approved',
-      reviewedAt: new Date().toISOString(),
-    }));
+    if (version.generationJobId) {
+      try {
+        const response = await readGenerationResponse(
+          await fetch(
+            `/api/studio/generations/${encodeURIComponent(version.generationJobId)}/review`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ state: 'approved' }),
+            },
+          ),
+        );
+        applyGenerationJob(scene.id, version.id, response);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'Approval could not be recorded.');
+        return;
+      }
+    } else {
+      updateVersion(scene.id, version.id, (current) => ({
+        ...current,
+        approvalState: 'approved',
+        reviewedAt: new Date().toISOString(),
+      }));
+    }
     setApprovalOpen(false);
-    setNotice(`Human approval recorded locally for ${scene.title}, version ${version.number}.`);
+    setNotice(
+      version.generationJobId
+        ? `Durable human approval recorded for ${scene.title}, version ${version.number}.`
+        : `Local demo approval recorded for ${scene.title}, version ${version.number}.`,
+    );
   }
 
   if (loadState === 'loading') {
@@ -1114,6 +1424,8 @@ export function CreativeStudioScreen() {
     version,
     campaignPaused: record.paused,
     guardrailsReady,
+    providerReady,
+    backendReady,
     onUpdateScene: updateScene,
     onGenerate: startGeneration,
     onCancel: cancelGeneration,
@@ -1137,7 +1449,13 @@ export function CreativeStudioScreen() {
             <div>
               <div className="studio-header__meta">
                 <StatusBadge tone="blue">AI Creative Studio</StatusBadge>
-                <span>{record.kind === 'sample' ? 'Sample session' : 'Local session'}</span>
+                <span>
+                  {record.kind === 'sample'
+                    ? 'Sample session'
+                    : backendReady
+                      ? 'Durable generation ready'
+                      : 'Local scene draft'}
+                </span>
               </div>
               <h1>{session.campaignName}</h1>
             </div>
@@ -1235,7 +1553,7 @@ export function CreativeStudioScreen() {
             <Button variant="secondary" onClick={() => setApprovalOpen(false)}>
               Keep in review
             </Button>
-            <Button variant="primary" leadingIcon={<Check size={16} />} onClick={confirmApproval}>
+            <Button variant="primary" leadingIcon={<Check size={16} />} onClick={() => void confirmApproval()}>
               Record approval
             </Button>
           </>
@@ -1246,8 +1564,9 @@ export function CreativeStudioScreen() {
           <div>
             <strong>This approval is explicit and version-specific.</strong>
             <p>
-              Cinemoriq will store it on this device with a timestamp. It does not
-              publish, export, or certify the illustrative media for production use.
+              {version.generationJobId
+                ? 'Cinemoriq will store this review against the exact durable provider output. Approval does not publish or export it.'
+                : 'This illustrative demo approval stays on this device. It does not publish, export, or certify the media for production use.'}
             </p>
           </div>
         </div>

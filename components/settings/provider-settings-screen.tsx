@@ -235,8 +235,8 @@ export function ProviderSettingsScreen({
             <strong>Hard truth: free web credits cannot power API automation.</strong>
             <p>
               Cinemoriq will never request your Hailuo password, session cookie, or
-              browser token. Real automated renders remain disabled until the
-              generation backend and secure provider secrets are connected.
+              browser token. The durable generation backend is ready; real renders
+              activate only after the matching server secret is configured.
             </p>
           </div>
           <Workflow size={20} aria-hidden="true" />

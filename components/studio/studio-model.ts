@@ -1,10 +1,11 @@
 import type { CampaignRecord } from '../campaigns/campaign-record-model';
+import type { GenerationOutputMetadata } from '../../lib/generation-contract';
 import {
   createDefaultGenerationConfig,
   type StudioGenerationConfig,
 } from './video-model-catalog';
 
-export const STUDIO_SESSION_SCHEMA_VERSION = 2;
+export const STUDIO_SESSION_SCHEMA_VERSION = 3;
 export const STUDIO_SESSIONS_STORAGE_KEY = 'cinemoriq.studioSessions.v1';
 
 export type StudioGenerationState =
@@ -26,10 +27,15 @@ export type StudioVersion = {
   number: number;
   createdAt: string;
   mediaSrc: string | null;
+  mediaType: 'image' | 'video';
   mediaAlt: string;
   illustrative: boolean;
   generationState: StudioGenerationState;
   generationProgress: number;
+  generationJobId: string | null;
+  submissionKey: string | null;
+  generationError: string | null;
+  outputMetadata: GenerationOutputMetadata | null;
   approvalState: StudioApprovalState;
   reviewedAt: string | null;
 };
@@ -141,6 +147,7 @@ export function createStudioSession(record: CampaignRecord): StudioSession {
         number,
         createdAt: now,
         mediaSrc: isDemo ? blueprint.mediaSrc : null,
+        mediaType: 'image' as const,
         mediaAlt: blueprint.mediaAlt,
         illustrative: isDemo,
         generationState: isDemo
@@ -149,6 +156,10 @@ export function createStudioSession(record: CampaignRecord): StudioSession {
             : ('ready' as const)
           : ('idle' as const),
         generationProgress: isDemo ? 100 : 0,
+        generationJobId: null,
+        submissionKey: null,
+        generationError: null,
+        outputMetadata: null,
         approvalState:
           isSelected && isDemo ? blueprint.approvalState : ('draft' as const),
         reviewedAt:

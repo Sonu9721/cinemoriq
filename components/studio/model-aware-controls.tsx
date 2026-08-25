@@ -144,6 +144,14 @@ export function ModelAwareGenerationControls({
     config.duration,
     config.mode,
   );
+  const advancedFields = model.advancedFields.filter(
+    (field) =>
+      !(
+        config.modelKey === 'veo-3.1' &&
+        config.mode === 'reference-to-video' &&
+        (field === 'negative-prompt' || field === 'seed')
+      ),
+  );
 
   function update(patch: Partial<StudioGenerationConfig>) {
     onChange({ ...config, ...patch });
@@ -335,7 +343,7 @@ export function ModelAwareGenerationControls({
             value={config.startImageUrl}
             disabled={disabled}
             onChange={(event) => update({ startImageUrl: event.target.value })}
-            hint="Public HTTPS image URL · upload storage comes in the backend phase"
+            hint="Public HTTPS image URL · Cinemoriq validates it before provider submission"
           />
           {mode.requiresEndImage || config.mode === 'image-to-video' ? (
             <Input
@@ -389,11 +397,11 @@ export function ModelAwareGenerationControls({
         </details>
       ) : null}
 
-      {model.advancedFields.length ? (
+      {advancedFields.length ? (
         <details className="studio-advanced-controls">
           <summary>Advanced model controls</summary>
           <div>
-            {model.advancedFields.includes('negative-prompt') ? (
+            {advancedFields.includes('negative-prompt') ? (
               <Textarea
                 id={`scene-negative-prompt-${sceneId}`}
                 label="Negative prompt"
@@ -404,7 +412,7 @@ export function ModelAwareGenerationControls({
                 placeholder="Blur, distortion, unwanted text…"
               />
             ) : null}
-            {model.advancedFields.includes('shot-type') ? (
+            {advancedFields.includes('shot-type') ? (
               <Select
                 id={`scene-shot-type-${sceneId}`}
                 label="Shot structure"
@@ -420,7 +428,7 @@ export function ModelAwareGenerationControls({
                 <option value="intelligent">Intelligent multi-shot</option>
               </Select>
             ) : null}
-            {model.advancedFields.includes('bitrate-mode') ? (
+            {advancedFields.includes('bitrate-mode') ? (
               <Select
                 id={`scene-bitrate-${sceneId}`}
                 label="Bitrate"
@@ -436,7 +444,7 @@ export function ModelAwareGenerationControls({
                 <option value="high">High · larger file</option>
               </Select>
             ) : null}
-            {model.advancedFields.includes('prompt-expansion') ? (
+            {advancedFields.includes('prompt-expansion') ? (
               <Select
                 id={`scene-prompt-expansion-${sceneId}`}
                 label="Prompt expansion"
@@ -455,7 +463,7 @@ export function ModelAwareGenerationControls({
                 <option value="quality">Quality</option>
               </Select>
             ) : null}
-            {model.advancedFields.includes('seed') ? (
+            {advancedFields.includes('seed') ? (
               <Input
                 id={`scene-seed-${sceneId}`}
                 label="Seed · optional"
