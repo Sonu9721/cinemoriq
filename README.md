@@ -4,6 +4,8 @@ Cinemoriq is an AI Creative Operating System for planning campaigns, directing c
 
 Password-protected live application: [Cinemoriq Sites](https://cinemoriq-os.plum-jay-8118.chatgpt.site)
 
+Detailed founder/operator handbook: [Cinemoriq Master Product, Video Workflow & Roadmap](docs/CINEMORIQ_MASTER_PRODUCT_VIDEO_GUIDE.md)
+
 ## Current product surface
 
 - Premium command-center application shell
