@@ -6,6 +6,8 @@ Password-protected live application: [Cinemoriq Sites](https://cinemoriq-os.plum
 
 Detailed founder/operator handbook: [Cinemoriq Master Product, Video Workflow & Roadmap](docs/CINEMORIQ_MASTER_PRODUCT_VIDEO_GUIDE.md)
 
+All public-safe project documents: [Cinemoriq Documentation Library](docs/README.md)
+
 ## Current product surface
 
 - Premium command-center application shell
