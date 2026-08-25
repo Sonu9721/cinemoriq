@@ -71,42 +71,7 @@ async function attemptKeys(request: Request, configuredEmail: string) {
   return { account, ip };
 }
 
-async function loadAttemptRows(
-  database: D1Database,
-  keys: Record<RateLimitScope, string>,
-) {
-  const result = await database
-    .prepare(
-      `SELECT id, window_started_at, attempt_count, locked_until, updated_at
-       FROM auth_login_attempts
-       WHERE id IN (?, ?)`,
-    )
-    .bind(keys.account, keys.ip)
-    .all<AuthLoginAttemptRow>();
-  return new Map((result.results ?? []).map((row) => [row.id, row]));
-}
-
-export async function getLoginRateLimit(
-  request: Request,
-  configuredEmail: string,
-  now = Date.now(),
-) {
-  const database = await ensureAuthRateLimitSchema();
-  const keys = await attemptKeys(request, configuredEmail);
-  const rows = await loadAttemptRows(database, keys);
-  const activeLocks = Object.values(keys)
-    .map((key) => rows.get(key)?.locked_until ?? 0)
-    .filter((lockedUntil) => lockedUntil > now);
-  const lockedUntil = activeLocks.length ? Math.max(...activeLocks) : 0;
-  return {
-    allowed: lockedUntil === 0,
-    retryAfterSeconds: lockedUntil
-      ? Math.max(1, Math.ceil((lockedUntil - now) / 1_000))
-      : 0,
-  };
-}
-
-function failureUpsert(
+function reservationUpsert(
   database: D1Database,
   scope: RateLimitScope,
   key: string,
@@ -124,47 +89,58 @@ function failureUpsert(
        VALUES (?, ?, 1, NULL, ?)
        ON CONFLICT(id) DO UPDATE SET
          attempt_count = CASE
+           WHEN COALESCE(auth_login_attempts.locked_until, 0) > ?
+             THEN auth_login_attempts.attempt_count
+           WHEN auth_login_attempts.locked_until IS NOT NULL THEN 1
            WHEN auth_login_attempts.window_started_at <= ? THEN 1
            ELSE auth_login_attempts.attempt_count + 1
          END,
          locked_until = CASE
-           WHEN auth_login_attempts.window_started_at <= ? THEN NULL
-           WHEN auth_login_attempts.attempt_count + 1 >= ?
-             THEN MAX(COALESCE(auth_login_attempts.locked_until, 0), ?)
            WHEN COALESCE(auth_login_attempts.locked_until, 0) > ?
              THEN auth_login_attempts.locked_until
+           WHEN auth_login_attempts.locked_until IS NOT NULL THEN NULL
+           WHEN auth_login_attempts.window_started_at <= ? THEN NULL
+           WHEN auth_login_attempts.attempt_count + 1 > ?
+             THEN MAX(COALESCE(auth_login_attempts.locked_until, 0), ?)
            ELSE NULL
          END,
          window_started_at = CASE
+           WHEN COALESCE(auth_login_attempts.locked_until, 0) > ?
+             THEN auth_login_attempts.window_started_at
+           WHEN auth_login_attempts.locked_until IS NOT NULL THEN ?
            WHEN auth_login_attempts.window_started_at <= ? THEN ?
            ELSE auth_login_attempts.window_started_at
          END,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at
+       RETURNING id, window_started_at, attempt_count, locked_until, updated_at`,
     )
     .bind(
       key,
       now,
       updatedAt,
+      now,
       windowCutoff,
+      now,
       windowCutoff,
       maximumFailures,
       lockedUntil,
+      now,
       now,
       windowCutoff,
       now,
     );
 }
 
-export async function recordLoginFailure(
+export async function reserveLoginAttempt(
   request: Request,
   configuredEmail: string,
   now = Date.now(),
 ) {
   const database = await ensureAuthRateLimitSchema();
   const keys = await attemptKeys(request, configuredEmail);
-  await database.batch([
-    failureUpsert(database, 'account', keys.account, now),
-    failureUpsert(database, 'ip', keys.ip, now),
+  const [accountResult, ipResult] = await database.batch<AuthLoginAttemptRow>([
+    reservationUpsert(database, 'account', keys.account, now),
+    reservationUpsert(database, 'ip', keys.ip, now),
     database
       .prepare(
         `DELETE FROM auth_login_attempts
@@ -173,6 +149,17 @@ export async function recordLoginFailure(
       )
       .bind(new Date(now - STALE_ROW_MS).toISOString(), now),
   ]);
+  const activeLocks = [accountResult, ipResult]
+    .flatMap((result) => result.results ?? [])
+    .map((row) => row.locked_until ?? 0)
+    .filter((lockedUntil) => lockedUntil > now);
+  const lockedUntil = activeLocks.length ? Math.max(...activeLocks) : 0;
+  return {
+    allowed: lockedUntil === 0,
+    retryAfterSeconds: lockedUntil
+      ? Math.max(1, Math.ceil((lockedUntil - now) / 1_000))
+      : 0,
+  };
 }
 
 export async function clearLoginFailures(

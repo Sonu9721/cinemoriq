@@ -7,8 +7,7 @@ import {
 } from '../../../../lib/server/auth';
 import {
   clearLoginFailures,
-  getLoginRateLimit,
-  recordLoginFailure,
+  reserveLoginAttempt,
 } from '../../../../lib/server/auth-rate-limit';
 import {
   assertSameOrigin,
@@ -53,15 +52,6 @@ export async function POST(request: Request) {
         'Cinemoriq access control is not configured yet.',
       );
     }
-    const rateLimit = await getLoginRateLimit(request, config.email);
-    if (!rateLimit.allowed) {
-      return errorResponse(
-        429,
-        'LOGIN_TEMPORARILY_LOCKED',
-        'Too many attempts. Wait before trying again.',
-        rateLimit.retryAfterSeconds,
-      );
-    }
     const body = await readLimitedJson(request, 4_096);
     const email =
       isRecord(body) && typeof body.email === 'string'
@@ -69,8 +59,16 @@ export async function POST(request: Request) {
         : '';
     const password =
       isRecord(body) && typeof body.password === 'string' ? body.password : '';
+    const reservation = await reserveLoginAttempt(request, config.email);
+    if (!reservation.allowed) {
+      return errorResponse(
+        429,
+        'LOGIN_TEMPORARILY_LOCKED',
+        'Too many attempts. Wait before trying again.',
+        reservation.retryAfterSeconds,
+      );
+    }
     if (!email || email.length > 254 || !password || password.length > 256) {
-      await recordLoginFailure(request, config.email);
       return errorResponse(
         401,
         'INVALID_CREDENTIALS',
@@ -80,7 +78,6 @@ export async function POST(request: Request) {
     const passwordValid = await verifyConfiguredPassword(password);
     const credentialsValid = email === config.email && passwordValid;
     if (!credentialsValid) {
-      await recordLoginFailure(request, config.email);
       return errorResponse(
         401,
         'INVALID_CREDENTIALS',

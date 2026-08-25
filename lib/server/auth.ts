@@ -9,6 +9,7 @@ import { getRuntimeEnv } from './runtime-env';
 export const AUTH_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
 
 const PASSWORD_HASH_PREFIX = 'pbkdf2-sha256';
+const PASSWORD_HASH_ITERATIONS = 100_000;
 const SESSION_TOKEN_PREFIX = 'v1';
 const encoder = new TextEncoder();
 
@@ -92,8 +93,7 @@ function parsePasswordHash(value: string) {
   if (
     algorithm !== PASSWORD_HASH_PREFIX ||
     !Number.isSafeInteger(iterations) ||
-    iterations < 100_000 ||
-    iterations > 600_000 ||
+    iterations !== PASSWORD_HASH_ITERATIONS ||
     !salt ||
     salt.byteLength < 16 ||
     !digest ||
