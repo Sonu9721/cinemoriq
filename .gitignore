@@ -36,6 +36,8 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/cloudflare-redirect/.wrangler/
+/cloudflare-redirect/work/
 *.tsbuildinfo
 
 # local visual QA captures
