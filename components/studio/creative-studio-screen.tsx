@@ -58,6 +58,12 @@ import {
   type StudioVersion,
 } from './studio-model';
 import { loadStudioSession, saveStudioSession } from './studio-store';
+import { ModelAwareGenerationControls } from './model-aware-controls';
+import {
+  getResolutionLabel,
+  getVideoModel,
+  validateGenerationConfig,
+} from './video-model-catalog';
 
 type LoadState = 'loading' | 'ready' | 'empty' | 'error';
 type BadgeTone = 'neutral' | 'blue' | 'success' | 'warning' | 'danger';
@@ -312,6 +318,14 @@ function StudioPreview({
   const activeGeneration = ['queued', 'generating'].includes(
     version.generationState,
   );
+  const model = getVideoModel(scene.generationConfig.modelKey);
+  const resolutionLabel =
+    scene.generationConfig.resolution === 'standard'
+      ? '≤1080p'
+      : getResolutionLabel(
+          scene.generationConfig.modelKey,
+          scene.generationConfig.resolution,
+        ).split(' · ')[0];
 
   return (
     <section className="studio-player" aria-labelledby="studio-preview-title">
@@ -341,8 +355,12 @@ function StudioPreview({
             </StatusBadge>
           </div>
           <div className="studio-player__format" aria-label="Preview format">
-            <span>4K</span>
-            <span>16:9</span>
+            <span>{resolutionLabel}</span>
+            <span>
+              {scene.generationConfig.aspectRatio === 'source'
+                ? 'Source ratio'
+                : scene.generationConfig.aspectRatio}
+            </span>
           </div>
         </div>
 
@@ -400,7 +418,9 @@ function StudioPreview({
             </button>
           ))}
         </div>
-        <span className="studio-version-rail__truth">Local preview · no model connected</span>
+        <span className="studio-version-rail__truth">
+          fal.ai preset · {model.name}
+        </span>
       </div>
     </section>
   );
@@ -542,6 +562,7 @@ function StudioTimeline({
 }
 
 function AIDirectorPanel({
+  controlIdPrefix,
   scene,
   version,
   campaignPaused,
@@ -552,6 +573,7 @@ function AIDirectorPanel({
   onRequestChanges,
   onApprove,
 }: {
+  controlIdPrefix: string;
   scene: StudioScene;
   version: StudioVersion;
   campaignPaused: boolean;
@@ -564,6 +586,10 @@ function AIDirectorPanel({
 }) {
   const running = ['queued', 'generating'].includes(version.generationState);
   const locked = running || campaignPaused || !guardrailsReady;
+  const generationErrors = validateGenerationConfig(
+    scene.generationConfig,
+    scene.prompt,
+  );
   const canReview =
     version.generationState === 'ready' &&
     Boolean(version.mediaSrc) &&
@@ -577,7 +603,7 @@ function AIDirectorPanel({
           <h2><WandSparkles size={19} /> AI Director</h2>
         </div>
         <StatusBadge tone={running ? 'blue' : 'neutral'} pulse={running}>
-          {running ? 'Simulating' : 'Offline'}
+          {running ? 'Simulating' : 'Catalog ready'}
         </StatusBadge>
       </div>
 
@@ -585,13 +611,14 @@ function AIDirectorPanel({
         <div className="studio-truth-note">
           <ShieldCheck size={16} aria-hidden="true" />
           <span>
-            <strong>Local preview only.</strong> Kling, Veo, and Seedance are presets;
-            no model API or render backend is connected.
+            <strong>One-provider architecture.</strong> Every model below maps to a
+            verified fal.ai endpoint. This screen validates inputs and estimates
+            cost; a secure server-side FAL_KEY is still required for paid renders.
           </span>
         </div>
 
         <Textarea
-          id={`scene-prompt-${scene.id}`}
+          id={`${controlIdPrefix}-scene-prompt-${scene.id}`}
           label="Scene prompt"
           value={scene.prompt}
           maxLength={1200}
@@ -620,13 +647,16 @@ function AIDirectorPanel({
           </div>
         </fieldset>
 
-        <label className="studio-range-field" htmlFor={`scene-lens-${scene.id}`}>
+        <label
+          className="studio-range-field"
+          htmlFor={`${controlIdPrefix}-scene-lens-${scene.id}`}
+        >
           <span>
             <strong>Camera lens</strong>
             <output>{scene.lensMm}mm</output>
           </span>
           <input
-            id={`scene-lens-${scene.id}`}
+            id={`${controlIdPrefix}-scene-lens-${scene.id}`}
             type="range"
             min={14}
             max={200}
@@ -638,7 +668,7 @@ function AIDirectorPanel({
         </label>
 
         <Select
-          id={`scene-lighting-${scene.id}`}
+          id={`${controlIdPrefix}-scene-lighting-${scene.id}`}
           label="Lighting"
           value={scene.lighting}
           disabled={locked}
@@ -651,26 +681,13 @@ function AIDirectorPanel({
           ))}
         </Select>
 
-        <Select
-          id={`scene-model-${scene.id}`}
-          label="Model preset"
-          value={scene.modelPreset}
+        <ModelAwareGenerationControls
+          sceneId={`${controlIdPrefix}-${scene.id}`}
+          config={scene.generationConfig}
           disabled={locked}
-          onChange={(event) =>
-            onUpdateScene({ modelPreset: event.target.value as StudioScene['modelPreset'] })
-          }
-          hint="Preset only · API connection required for a real render"
-        >
-          <option>Kling</option>
-          <option>Veo</option>
-          <option>Seedance</option>
-        </Select>
-
-        <div className="studio-output-spec">
-          <span><small>Duration</small><strong>{scene.durationSeconds}s</strong></span>
-          <span><small>Aspect</small><strong>16:9</strong></span>
-          <span><small>Output</small><strong>4K</strong></span>
-        </div>
+          validationErrors={generationErrors}
+          onChange={(generationConfig) => onUpdateScene({ generationConfig })}
+        />
 
         {!guardrailsReady ? (
           <p className="studio-lock-notice" role="alert">
@@ -695,7 +712,7 @@ function AIDirectorPanel({
             variant="primary"
             size="lg"
             leadingIcon={<Sparkles size={17} />}
-            disabled={locked}
+            disabled={locked || generationErrors.length > 0}
             onClick={() =>
               onGenerate(
                 version.generationState === 'failed' ||
@@ -964,7 +981,7 @@ export function CreativeStudioScreen() {
       }));
     } else {
       const versionNumber = Math.max(...scene.versions.map((item) => item.number)) + 1;
-      targetVersionId = `${scene.id}-v${versionNumber}-${Date.now()}`;
+      targetVersionId = `${scene.id}-v${versionNumber}`;
       const nextVersion: StudioVersion = {
         id: targetVersionId,
         number: versionNumber,
@@ -995,7 +1012,7 @@ export function CreativeStudioScreen() {
       );
     }
     setNotice(
-      'Local workflow simulation queued. This does not contact Kling, Veo, Seedance, or create media.',
+      `Local workflow simulation queued for ${getVideoModel(scene.generationConfig.modelKey).name}. No paid fal.ai request was sent.`,
     );
 
     queueTimerRef.current = window.setTimeout(() => {
@@ -1091,19 +1108,17 @@ export function CreativeStudioScreen() {
       ? `/campaigns/workspace?demo=${DEMO_CAMPAIGN_ID}`
       : `/campaigns/workspace?campaign=${encodeURIComponent(record.id)}`;
 
-  const director = (
-    <AIDirectorPanel
-      scene={scene}
-      version={version}
-      campaignPaused={record.paused}
-      guardrailsReady={guardrailsReady}
-      onUpdateScene={updateScene}
-      onGenerate={startGeneration}
-      onCancel={cancelGeneration}
-      onRequestChanges={requestChanges}
-      onApprove={() => setApprovalOpen(true)}
-    />
-  );
+  const directorProps = {
+    scene,
+    version,
+    campaignPaused: record.paused,
+    guardrailsReady,
+    onUpdateScene: updateScene,
+    onGenerate: startGeneration,
+    onCancel: cancelGeneration,
+    onRequestChanges: requestChanges,
+    onApprove: () => setApprovalOpen(true),
+  };
 
   return (
     <DashboardShell activeSection="Studio" immersive>
@@ -1192,7 +1207,9 @@ export function CreativeStudioScreen() {
             />
           </div>
 
-          <aside className="studio-director-panel">{director}</aside>
+          <aside className="studio-director-panel">
+            <AIDirectorPanel controlIdPrefix="desktop" {...directorProps} />
+          </aside>
         </div>
       </main>
 
@@ -1202,7 +1219,9 @@ export function CreativeStudioScreen() {
         eyebrow={`Scene ${String(scene.number).padStart(2, '0')}`}
         title="AI Director"
       >
-        <div className="studio-director-drawer">{director}</div>
+        <div className="studio-director-drawer">
+          <AIDirectorPanel controlIdPrefix="drawer" {...directorProps} />
+        </div>
       </Drawer>
 
       <Modal

@@ -4414,6 +4414,294 @@ a {
   color: var(--color-text-body);
 }
 
+.studio-model-controls {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.studio-model-card {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid rgb(77 142 255 / 18%);
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at 100% 0%, rgb(77 142 255 / 10%), transparent 9rem),
+    var(--color-recessed);
+  padding: 0.8rem;
+}
+
+.studio-model-card__heading,
+.studio-model-card__fit,
+.studio-reference-list__heading,
+.studio-reference-box summary,
+.studio-output-metadata > span {
+  display: flex;
+  align-items: center;
+}
+
+.studio-model-card__heading {
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.studio-model-card__heading > div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.studio-model-card__heading small {
+  color: var(--color-primary-soft);
+  font-size: 0.625rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-model-card__heading strong {
+  color: var(--color-text);
+  font-size: var(--font-label-size);
+}
+
+.studio-model-card p,
+.studio-reference-box p,
+.studio-price-card p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-micro-size);
+  line-height: 1.5;
+}
+
+.studio-capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.studio-capability-list span,
+.studio-output-metadata small {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-low);
+  color: var(--color-text-muted);
+  padding: 0.2rem 0.45rem;
+  font-size: 0.5625rem;
+  font-weight: 650;
+}
+
+.studio-model-card__fit {
+  align-items: flex-start;
+  gap: 0.35rem;
+  color: var(--color-text-faint);
+  font-size: 0.625rem;
+  line-height: 1.45;
+}
+
+.studio-model-card__fit svg {
+  flex: 0 0 auto;
+  margin-top: 0.05rem;
+  color: var(--color-primary-soft);
+}
+
+.studio-control-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.studio-audio-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-recessed);
+  padding: 0.7rem;
+}
+
+.studio-audio-control__icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgb(77 142 255 / 20%);
+  border-radius: var(--radius-sm);
+  background: rgb(77 142 255 / 7%);
+  color: var(--color-primary-soft);
+}
+
+.studio-audio-control > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.studio-audio-control strong {
+  color: var(--color-text-body);
+  font-size: var(--font-label-size);
+}
+
+.studio-audio-control small {
+  color: var(--color-text-faint);
+  font-size: 0.625rem;
+  line-height: 1.4;
+}
+
+.studio-audio-switch {
+  position: relative;
+  display: grid;
+  min-width: 4.75rem;
+  min-height: 2rem;
+  grid-template-columns: 1rem 1fr;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-low);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.25rem 0.55rem 0.25rem 0.35rem;
+  font-size: 0.5625rem;
+  font-weight: 750;
+}
+
+.studio-audio-switch > span {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  box-shadow: 0 0 0 3px rgb(248 250 252 / 4%);
+}
+
+.studio-audio-switch--active {
+  border-color: rgb(77 142 255 / 42%);
+  background: rgb(77 142 255 / 11%);
+  color: var(--color-primary-soft);
+}
+
+.studio-audio-switch--active > span {
+  background: var(--color-primary);
+}
+
+.studio-audio-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.76;
+}
+
+.studio-keyframe-fields,
+.studio-reference-list,
+.studio-advanced-controls > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.studio-reference-box,
+.studio-advanced-controls {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-recessed);
+  padding: 0.75rem;
+}
+
+.studio-reference-box summary,
+.studio-advanced-controls summary {
+  color: var(--color-text-body);
+  cursor: pointer;
+  font-size: var(--font-label-size);
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.studio-reference-box summary {
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.studio-reference-box summary span,
+.studio-reference-list__heading span,
+.studio-output-metadata > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.studio-reference-box summary small,
+.studio-reference-list__heading small {
+  color: var(--color-text-faint);
+  font-size: 0.625rem;
+}
+
+.studio-reference-box > p {
+  margin: 0.65rem 0;
+}
+
+.studio-reference-list + .studio-reference-list {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+}
+
+.studio-reference-list__heading {
+  justify-content: space-between;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-micro-size);
+  font-weight: 650;
+}
+
+.studio-reference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.35rem;
+}
+
+.studio-reference-row .field {
+  min-width: 0;
+}
+
+.studio-reference-row .input {
+  font-size: 0.625rem;
+}
+
+.studio-reference-row .button {
+  width: 2.25rem;
+  height: 2.25rem;
+  min-height: 2.25rem;
+}
+
+.studio-reference-add {
+  justify-self: start;
+}
+
+.studio-advanced-controls > div {
+  margin-top: 0.75rem;
+}
+
+.studio-advanced-controls .textarea {
+  min-height: 5rem;
+}
+
+.studio-model-note,
+.studio-config-ready {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.45rem;
+  margin: 0;
+  border: 1px solid rgb(77 142 255 / 14%);
+  border-radius: var(--radius-md);
+  background: rgb(77 142 255 / 5%);
+  color: var(--color-text-muted);
+  padding: 0.7rem;
+  font-size: var(--font-micro-size);
+  line-height: 1.5;
+}
+
+.studio-model-note svg,
+.studio-config-ready svg {
+  color: var(--color-primary-soft);
+}
+
 .studio-control-group {
   min-width: 0;
   margin: 0;
@@ -4498,7 +4786,7 @@ a {
 
 .studio-output-spec {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-1);
 }
 
@@ -4517,8 +4805,100 @@ a {
 }
 
 .studio-output-spec strong {
+  overflow: hidden;
+  color: var(--color-text-body);
+  font-size: var(--font-micro-size);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.studio-price-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  border: 1px solid rgb(255 183 134 / 17%);
+  border-radius: var(--radius-md);
+  background: rgb(255 183 134 / 5%);
+  padding: 0.75rem;
+}
+
+.studio-price-card > span {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: rgb(255 183 134 / 9%);
+  color: var(--color-warning);
+}
+
+.studio-price-card > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.studio-price-card strong {
   color: var(--color-text-body);
   font-size: var(--font-label-size);
+}
+
+.studio-price-card small {
+  color: var(--color-text-faint);
+  font-size: 0.5625rem;
+  line-height: 1.4;
+}
+
+.studio-output-metadata {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-recessed);
+  padding: 0.75rem;
+}
+
+.studio-output-metadata > span {
+  color: var(--color-text-body);
+  font-size: var(--font-micro-size);
+  font-weight: 700;
+}
+
+.studio-output-metadata > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.studio-output-metadata code {
+  overflow: hidden;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-primary-soft);
+  padding-top: 0.55rem;
+  font-size: 0.5625rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-config-errors {
+  border: 1px solid rgb(255 183 134 / 22%);
+  border-radius: var(--radius-md);
+  background: rgb(255 183 134 / 6%);
+  color: var(--color-warning);
+  padding: 0.75rem;
+}
+
+.studio-config-errors strong {
+  font-size: var(--font-micro-size);
+}
+
+.studio-config-errors ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.625rem;
+  line-height: 1.45;
 }
 
 .studio-lock-notice {

@@ -1,6 +1,10 @@
 import type { CampaignRecord } from '../campaigns/campaign-record-model';
+import {
+  createDefaultGenerationConfig,
+  type StudioGenerationConfig,
+} from './video-model-catalog';
 
-export const STUDIO_SESSION_SCHEMA_VERSION = 1;
+export const STUDIO_SESSION_SCHEMA_VERSION = 2;
 export const STUDIO_SESSIONS_STORAGE_KEY = 'cinemoriq.studioSessions.v1';
 
 export type StudioGenerationState =
@@ -45,7 +49,7 @@ export type StudioScene = {
     | 'Soft Diffused'
     | 'Neon / Cyberpunk'
     | 'Natural Daylight';
-  modelPreset: 'Kling' | 'Veo' | 'Seedance';
+  generationConfig: StudioGenerationConfig;
   selectedVersionId: string;
   versions: StudioVersion[];
 };
@@ -181,7 +185,13 @@ export function createStudioSession(record: CampaignRecord): StudioSession {
       visualStyle: blueprint.visualStyle,
       lensMm: blueprint.lensMm,
       lighting: blueprint.lighting,
-      modelPreset: index === 0 ? 'Veo' : index === 1 ? 'Kling' : 'Seedance',
+      generationConfig: createDefaultGenerationConfig(
+        index === 0
+          ? 'veo-3.1'
+          : index === 1
+            ? 'kling-v3-standard'
+            : 'seedance-2.0',
+      ),
       selectedVersionId: versions[versions.length - 1].id,
       versions,
     };

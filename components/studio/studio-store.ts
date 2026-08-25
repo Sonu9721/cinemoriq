@@ -7,6 +7,15 @@ import {
   type StudioSession,
   type StudioVersion,
 } from './studio-model';
+import {
+  createDefaultGenerationConfig,
+  getVideoModel,
+  isStudioGenerationMode,
+  isStudioVideoModelKey,
+  reconcileGenerationConfig,
+  type StudioGenerationConfig,
+  type StudioVideoModelKey,
+} from './video-model-catalog';
 
 type StudioCollection = {
   schemaVersion: number;
@@ -20,7 +29,6 @@ const lightingOptions = [
   'Neon / Cyberpunk',
   'Natural Daylight',
 ] as const;
-const modelPresets = ['Kling', 'Veo', 'Seedance'] as const;
 const approvalStates: StudioApprovalState[] = [
   'draft',
   'in-review',
@@ -40,6 +48,73 @@ function finiteNumber(value: unknown, fallback: number, min: number, max: number
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(max, Math.max(min, value))
     : fallback;
+}
+
+function safeText(value: unknown, maxLength = 2048) {
+  return typeof value === 'string' ? value.slice(0, maxLength) : '';
+}
+
+function safeTextList(value: unknown, maxItems: number) {
+  return Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.slice(0, 2048))
+        .slice(0, maxItems)
+    : [];
+}
+
+function legacyModelKey(value: unknown): StudioVideoModelKey {
+  if (value === 'Kling') return 'kling-v3-standard';
+  if (value === 'Seedance') return 'seedance-2.0';
+  return 'veo-3.1';
+}
+
+function sanitizeGenerationConfig(
+  value: unknown,
+  legacyPreset: unknown,
+): StudioGenerationConfig {
+  const raw = value && typeof value === 'object'
+    ? (value as Partial<StudioGenerationConfig>)
+    : {};
+  const modelKey = isStudioVideoModelKey(raw.modelKey)
+    ? raw.modelKey
+    : legacyModelKey(legacyPreset);
+  const model = getVideoModel(modelKey);
+  const requestedMode = isStudioGenerationMode(raw.mode)
+    ? raw.mode
+    : model.modes[0].key;
+  const initial = createDefaultGenerationConfig(modelKey);
+  const duration =
+    raw.duration === 'auto' ||
+    (typeof raw.duration === 'number' && Number.isFinite(raw.duration))
+      ? raw.duration
+      : initial.duration;
+  const candidate: StudioGenerationConfig = {
+    ...initial,
+    mode: requestedMode,
+    duration,
+    resolution: safeText(raw.resolution, 32) || initial.resolution,
+    aspectRatio: safeText(raw.aspectRatio, 16) || initial.aspectRatio,
+    audioEnabled:
+      typeof raw.audioEnabled === 'boolean'
+        ? raw.audioEnabled
+        : initial.audioEnabled,
+    startImageUrl: safeText(raw.startImageUrl),
+    endImageUrl: safeText(raw.endImageUrl),
+    referenceImageUrls: safeTextList(raw.referenceImageUrls, 9),
+    referenceVideoUrls: safeTextList(raw.referenceVideoUrls, 3),
+    referenceAudioUrls: safeTextList(raw.referenceAudioUrls, 3),
+    negativePrompt: safeText(raw.negativePrompt, 1200),
+    shotType: raw.shotType === 'intelligent' ? 'intelligent' : 'customize',
+    bitrateMode: raw.bitrateMode === 'high' ? 'high' : 'standard',
+    promptExpansionMode: ['disabled', 'fast', 'balanced', 'quality'].includes(
+      raw.promptExpansionMode ?? '',
+    )
+      ? (raw.promptExpansionMode as StudioGenerationConfig['promptExpansionMode'])
+      : 'balanced',
+    seed: safeText(raw.seed, 24),
+  };
+  return reconcileGenerationConfig(candidate, modelKey, requestedMode);
 }
 
 function sanitizeVersion(value: unknown): StudioVersion | null {
@@ -90,7 +165,7 @@ function sanitizeVersion(value: unknown): StudioVersion | null {
 
 function sanitizeScene(value: unknown): StudioScene | null {
   if (!value || typeof value !== 'object') return null;
-  const scene = value as Partial<StudioScene>;
+  const scene = value as Partial<StudioScene> & { modelPreset?: unknown };
   if (
     typeof scene.id !== 'string' ||
     !scene.id ||
@@ -135,11 +210,10 @@ function sanitizeScene(value: unknown): StudioScene | null {
     )
       ? (scene.lighting as StudioScene['lighting'])
       : 'High Contrast / Low Key',
-    modelPreset: modelPresets.includes(
-      scene.modelPreset as (typeof modelPresets)[number],
-    )
-      ? (scene.modelPreset as StudioScene['modelPreset'])
-      : 'Veo',
+    generationConfig: sanitizeGenerationConfig(
+      scene.generationConfig,
+      scene.modelPreset,
+    ),
     selectedVersionId,
     versions,
   };
@@ -149,7 +223,7 @@ function sanitizeSession(value: unknown): StudioSession | null {
   if (!value || typeof value !== 'object') return null;
   const session = value as Partial<StudioSession>;
   if (
-    session.schemaVersion !== STUDIO_SESSION_SCHEMA_VERSION ||
+    ![1, STUDIO_SESSION_SCHEMA_VERSION].includes(session.schemaVersion ?? -1) ||
     typeof session.campaignId !== 'string' ||
     !session.campaignId ||
     !Array.isArray(session.scenes)
@@ -202,7 +276,7 @@ function loadCollection(): StudioCollection {
       return { schemaVersion: STUDIO_SESSION_SCHEMA_VERSION, sessions: [] };
     }
     const parsed = JSON.parse(raw) as Partial<StudioCollection>;
-    if (parsed.schemaVersion !== STUDIO_SESSION_SCHEMA_VERSION) {
+    if (![1, STUDIO_SESSION_SCHEMA_VERSION].includes(parsed.schemaVersion ?? -1)) {
       return { schemaVersion: STUDIO_SESSION_SCHEMA_VERSION, sessions: [] };
     }
     return {
