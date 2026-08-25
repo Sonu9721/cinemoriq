@@ -25,6 +25,9 @@ export function assertSameOrigin(request: Request) {
 }
 
 export function jsonError(error: unknown) {
+  if (!(error instanceof GenerationApiException)) {
+    console.error('[cinemoriq-api] Unexpected server error', error);
+  }
   const exception =
     error instanceof GenerationApiException
       ? error

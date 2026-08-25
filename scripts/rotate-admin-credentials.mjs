@@ -3,7 +3,9 @@ import { pbkdf2Sync, randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 
 const DEFAULT_EMAIL = 'digitalsonu17@gmail.com';
-const ITERATIONS = 310_000;
+// Cloudflare Workers caps Web Crypto PBKDF2 at 100,000 iterations.
+// Cinemoriq compensates with a generated 192-bit password and strict rate limits.
+const ITERATIONS = 100_000;
 
 function base64Url(value) {
   return Buffer.from(value).toString('base64url');

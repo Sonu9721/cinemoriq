@@ -88,6 +88,10 @@ Use
 `npm run auth:rotate -- --email=new-admin@example.com` to change the login email
 at the same time. Never use an email-account password as the Cinemoriq password.
 
+Cinemoriq generates a 192-bit random password. Its PBKDF2 work factor is pinned
+to Cloudflare Workers' 100,000-iteration runtime ceiling, with D1-backed IP and
+account rate limits providing online brute-force protection.
+
 For the recommended production path:
 
 1. Create a key at the official fal.ai dashboard.
