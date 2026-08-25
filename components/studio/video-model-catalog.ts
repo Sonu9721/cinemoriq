@@ -18,6 +18,8 @@ export type StudioGenerationMode = (typeof GENERATION_MODES)[number];
 export type StudioGenerationDuration = number | 'auto';
 export type StudioModelProvider = 'fal-ai' | 'minimax-direct';
 
+export const GENERATION_COST_LIMIT_USD = 50;
+
 export type StudioGenerationConfig = {
   modelKey: StudioVideoModelKey;
   mode: StudioGenerationMode;
@@ -57,6 +59,7 @@ export type StudioModeDefinition = {
   description: string;
   endpointId: string;
   aspectRatios?: CatalogOption[];
+  defaultAspectRatio?: string;
   resolutions?: CatalogOption[];
   references: StudioReferenceLimits;
   requiresStartImage?: boolean;
@@ -235,7 +238,7 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
     name: 'Kling 3 Standard',
     maker: 'Kuaishou',
     shortName: 'Kling',
-    description: 'Fluid motion, multi-shot direction, and strong product movement.',
+    description: 'Fluid motion, smart shot structure, and strong product movement.',
     recommendedFor: 'Action, machinery, camera movement, and multi-shot sequences.',
     durationOptions: Array.from({ length: 13 }, (_, index) => index + 3),
     defaultDuration: 5,
@@ -280,7 +283,7 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
       },
     ],
     advancedFields: ['negative-prompt', 'shot-type'],
-    capabilities: ['Native audio', '3–15 seconds', 'Multi-shot', 'Start/end frames'],
+    capabilities: ['Native audio', '3–15 seconds', 'Smart shot structure', 'Start/end frames'],
     outputFields: ['MP4 URL', 'MIME type', 'File name', 'File size'],
     pricingLabel: '$0.084–$0.126 / second',
     pricingNote: 'Standard endpoint; voice control has a separate higher rate.',
@@ -323,6 +326,7 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
         label: 'Image to video',
         description: 'Animate one opening image with an optional automatic ratio.',
         endpointId: 'bytedance/seedance-2.0/image-to-video',
+        defaultAspectRatio: 'auto',
         references: firstFrameReferences,
         requiresStartImage: true,
       },
@@ -331,6 +335,7 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
         label: 'First + last frame',
         description: 'Control both ends of the shot through the image endpoint.',
         endpointId: 'bytedance/seedance-2.0/image-to-video',
+        defaultAspectRatio: 'auto',
         references: firstLastReferences,
         requiresStartImage: true,
         requiresEndImage: true,
@@ -340,12 +345,13 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
         label: 'Multimodal references',
         description: 'Combine appearance, motion, and sound references.',
         endpointId: 'bytedance/seedance-2.0/reference-to-video',
+        defaultAspectRatio: 'auto',
         references: {
           images: 9,
           videos: 3,
           audio: 3,
           total: 12,
-          note: 'Up to 9 images, 3 videos, and 3 audio files; 12 files total.',
+          note: 'Up to 9 images, 3 videos, and 3 audio files; 12 total. Videos must be 2–15s combined and under 50 MB total; audio must be 15s combined or less.',
         },
       },
     ],
@@ -411,13 +417,14 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
         label: 'Multimodal references',
         description: 'Combine identity, motion, editing rhythm, and voice context.',
         endpointId: 'minimax/h3/reference-to-video',
+        defaultAspectRatio: 'adaptive',
         aspectRatios: [{ value: 'adaptive', label: 'Adaptive' }, ...standardAspectOptions],
         references: {
           images: 9,
           videos: 3,
           audio: 3,
           total: 12,
-          note: 'Up to 9 images, 3 videos, and 3 audio clips; 12 files total.',
+          note: 'Up to 9 images, 3 videos, and 3 audio clips; 12 total. Video and audio references must each stay within a 15-second combined window.',
         },
       },
     ],
@@ -549,7 +556,9 @@ export function createDefaultGenerationConfig(
     duration: model.defaultDuration,
     resolution: model.defaultResolution,
     aspectRatio:
-      aspectOptions.find((option) => option.value === model.defaultAspectRatio)
+      aspectOptions.find(
+        (option) => option.value === (mode.defaultAspectRatio ?? model.defaultAspectRatio),
+      )
         ?.value ?? aspectOptions[0].value,
     audioEnabled: model.audio !== 'unsupported',
     startImageUrl: '',
@@ -589,9 +598,12 @@ export function reconcileGenerationConfig(
       : resolutionOptions[0].value;
   const aspectRatio = aspects.some(
     (option) => option.value === previous.aspectRatio,
-  )
+  ) && (!requestedMode || requestedMode === previous.mode)
     ? previous.aspectRatio
-    : aspects.find((option) => option.value === model.defaultAspectRatio)?.value ??
+    : aspects.find(
+          (option) =>
+            option.value === (mode.defaultAspectRatio ?? model.defaultAspectRatio),
+        )?.value ??
       aspects[0].value;
 
   return {
@@ -642,15 +654,10 @@ export function getResolutionLabel(
 }
 
 export function estimateGenerationCost(config: StudioGenerationConfig) {
-  if (config.duration === 'auto') {
-    return {
-      amount: null,
-      label: 'After duration',
-      note: 'fal.ai will choose the duration, so cost is finalized after generation.',
-    };
-  }
-
-  const duration = config.duration;
+  const automaticDuration = config.duration === 'auto';
+  // Seedance can choose up to 15 seconds in auto mode. Authorize against that
+  // worst case so the server always enforces a real paid-cost ceiling.
+  const duration: number = config.duration === 'auto' ? 15 : config.duration;
   let amount = 0;
   const model = getVideoModel(config.modelKey);
   let note = `Estimated from ${model.providerLabel} public pricing; final provider charge may vary.`;
@@ -681,7 +688,9 @@ export function estimateGenerationCost(config: StudioGenerationConfig) {
       const tokenRate = config.resolution === '4k' ? 0.008 : 0.014;
       const tokens = ((pixels[config.resolution] ?? pixels['720p']) * duration * 24) / 1024;
       amount = (tokens / 1000) * tokenRate;
-      note = 'Pixel-token estimate; reference media duration can change the final charge.';
+      note = automaticDuration
+        ? 'Worst-case 15s approval bound for Auto duration; the final charge can be lower.'
+        : 'Pixel-token estimate; reference media duration can change the final charge.';
       break;
     }
     case 'minimax-h3': {
@@ -714,7 +723,7 @@ export function estimateGenerationCost(config: StudioGenerationConfig) {
 
   return {
     amount,
-    label: `$${amount.toFixed(2)}`,
+    label: `${automaticDuration ? '≤' : ''}$${amount.toFixed(2)}`,
     note,
   };
 }
@@ -723,7 +732,7 @@ function isPublicMediaUrl(value: string) {
   if (!value.trim()) return false;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
+    return url.protocol === 'https:';
   } catch {
     return false;
   }
@@ -784,7 +793,7 @@ export function validateGenerationConfig(
     ...audioUrls,
   ].find((value) => value.trim() && !isPublicMediaUrl(value));
   if (invalidReference) {
-    errors.push('Reference assets must use publicly accessible http(s) URLs.');
+    errors.push('Reference assets must use publicly accessible HTTPS URLs.');
   }
 
   return Array.from(new Set(errors));

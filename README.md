@@ -12,9 +12,12 @@ Private live application: [Cinemoriq Sites](https://cinemoriq-os.plum-jay-8118.c
 - Creative concept preview, production log, pause/resume, and brief details
 - AI Creative Studio with scene and version selection, a cinematic preview player,
   an interactive timeline, real provider job orchestration, private output storage,
-  resumable polling, and explicit human approval states
+  resumable polling, durable job recovery, output download, and explicit human
+  approval states
 - Model-aware generation through fal.ai for Veo 3.1, Kling 3 Standard,
   Seedance 2.0, and MiniMax H3
+- Secure local image/video/audio uploads, explicit paid-cost confirmation, and
+  endpoint-specific duration, resolution, audio, aspect, and reference controls
 - Optional MiniMax Direct connection for the legacy Hailuo 02 API model
 - Audience, offer, brand, channel, and creative-direction planning
 - Rights and human-review confirmations
@@ -58,6 +61,21 @@ Keys are never sent to the browser. Hailuo consumer-site welcome credits are
 separate from MiniMax Open Platform API billing and cannot power this backend.
 The current deployment must remain owner-only because generation jobs and private
 media are intentionally scoped to this one-person operating system.
+
+For the recommended production path:
+
+1. Create a key at the official fal.ai dashboard.
+2. Add it to the Cinemoriq Sites production environment as the secret `FAL_KEY`.
+3. Deploy the current saved version again so the new environment revision applies.
+4. Refresh `/settings`; it should report that the server secret is detected.
+5. Open Studio, choose a fal.ai model, upload any required references, review the
+   explicit cost ceiling, and submit the generation.
+
+Local input files are transferred directly to a narrowly scoped fal.ai signed
+upload URL, so the server key never reaches the browser. fal CDN input copies are
+public to anyone who knows their unguessable URL and expire after 24 hours.
+Successful provider outputs are copied into Cinemoriq's private R2 bucket before
+review and download.
 
 ## Cloudflare deployment
 

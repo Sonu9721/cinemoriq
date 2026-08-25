@@ -147,6 +147,9 @@ function buildFalInput(
       aspect_ratio: config.aspectRatio,
       generate_audio: config.audioEnabled,
       bitrate_mode: config.bitrateMode,
+      // Cinemoriq is currently a one-person workspace, so this stable opaque ID
+      // represents its single end user without exposing account data.
+      end_user_id: 'cinemoriq-owner-v1',
     };
     if (config.mode === 'image-to-video' || config.mode === 'first-last-frame') {
       input.image_url = config.startImageUrl;
@@ -217,8 +220,23 @@ async function fetchJson(
     const response = await fetch(url, { ...init, signal: controller.signal });
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) {
-      const detail = payload && typeof payload.detail === 'string' ? payload.detail : null;
-      const message = detail ?? `Provider request failed with HTTP ${response.status}.`;
+      const detail = payload?.detail;
+      const detailMessage =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail
+                .map((item) =>
+                  item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string'
+                    ? item.msg
+                    : null,
+                )
+                .filter((item): item is string => Boolean(item))
+                .join(' · ')
+            : '';
+      const message = detailMessage ||
+        (payload && typeof payload.message === 'string' ? payload.message : '') ||
+        `Provider request failed with HTTP ${response.status}.`;
       throw new ProviderRequestError(
         'PROVIDER_HTTP_ERROR',
         message.slice(0, 300),
@@ -240,6 +258,24 @@ async function fetchJson(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function falQueueUrl(value: unknown, fallback: string) {
+  if (typeof value !== 'string') return fallback;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol === 'https:' &&
+      url.hostname === 'queue.fal.run' &&
+      !url.username &&
+      !url.password
+    ) {
+      return url.toString();
+    }
+  } catch {
+    // Fall through to the endpoint-derived queue URL.
+  }
+  return fallback;
 }
 
 function assertMiniMaxSuccess(payload: Record<string, unknown>) {
@@ -271,6 +307,11 @@ export async function submitProviderGeneration(args: {
         Authorization: `Key ${args.secret}`,
         'Content-Type': 'application/json',
         'X-Fal-Store-IO': '0',
+        // Cinemoriq copies successful media into private R2. Keep the temporary
+        // public provider object long enough for recovery if the browser closes.
+        'X-Fal-Object-Lifecycle-Preference': JSON.stringify({
+          expiration_duration_seconds: 7 * 24 * 60 * 60,
+        }),
       },
       body: JSON.stringify(
         buildFalInput(
@@ -285,9 +326,9 @@ export async function submitProviderGeneration(args: {
     const base = `https://queue.fal.run/${endpoint}/requests/${encodeURIComponent(requestId)}`;
     return {
       requestId,
-      statusUrl: `${base}/status`,
-      responseUrl: base,
-      cancelUrl: `${base}/cancel`,
+      statusUrl: falQueueUrl(payload.status_url, `${base}/status`),
+      responseUrl: falQueueUrl(payload.response_url, `${base}/response`),
+      cancelUrl: falQueueUrl(payload.cancel_url, `${base}/cancel`),
     };
   }
 
@@ -319,8 +360,8 @@ function readFalOutput(payload: Record<string, unknown>): ProviderOutput {
     mimeType: typeof video?.content_type === 'string' ? video.content_type : null,
     fileName: typeof video?.file_name === 'string' ? video.file_name : null,
     fileSize: typeof video?.file_size === 'number' ? video.file_size : null,
-    width: null,
-    height: null,
+    width: typeof video?.width === 'number' ? video.width : null,
+    height: typeof video?.height === 'number' ? video.height : null,
     seed: typeof payload.seed === 'number' ? payload.seed : null,
     expandedPrompt: typeof payload.expanded_prompt === 'string' ? payload.expanded_prompt : null,
   };

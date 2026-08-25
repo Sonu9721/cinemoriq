@@ -54,10 +54,10 @@ function ConnectionState({ status }: { status: ProviderStatus }) {
     <div className="provider-connection-state" aria-live="polite">
       <span className={status.configured ? 'is-connected' : undefined} />
       <div>
-        <strong>{status.configured ? 'Connected securely' : 'Not configured'}</strong>
+        <strong>{status.configured ? 'Server secret detected' : 'Not configured'}</strong>
         <small>
           {status.configured
-            ? `Server secret detected · ••••${status.maskedSuffix}`
+            ? `Stored outside the browser · ••••${status.maskedSuffix} · provider validates it on first request`
             : 'No browser-side key is stored'}
         </small>
       </div>
@@ -124,6 +124,11 @@ export function ProviderSettingsScreen({
               copiedSecret={copiedSecret}
               onCopy={copySecretName}
             />
+            <ol className="provider-setup-steps">
+              <li><span>1</span><small>Create a fal.ai key from the official dashboard.</small></li>
+              <li><span>2</span><small>Add it to Cinemoriq Sites as secret <code>FAL_KEY</code>.</small></li>
+              <li><span>3</span><small>Redeploy, refresh Studio, upload an asset, then generate.</small></li>
+            </ol>
             <div className="provider-card__models">
               <span>Veo 3.1</span>
               <span>Kling 3</span>

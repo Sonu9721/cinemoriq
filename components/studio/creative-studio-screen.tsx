@@ -5,6 +5,9 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  CircleDollarSign,
+  Download,
+  FileOutput,
   Film,
   Layers3,
   Pause,
@@ -33,6 +36,8 @@ import type {
   ConnectionStatusResponse,
   GenerationApiError,
   GenerationJobResponse,
+  GenerationJobsResponse,
+  GenerationJobView,
 } from '../../lib/generation-contract';
 import {
   DEMO_CAMPAIGN_ID,
@@ -66,6 +71,8 @@ import { loadStudioSession, saveStudioSession } from './studio-store';
 import { ModelAwareGenerationControls } from './model-aware-controls';
 import {
   estimateGenerationCost,
+  GENERATION_COST_LIMIT_USD,
+  formatGenerationDuration,
   getResolutionLabel,
   getVideoModel,
   validateGenerationConfig,
@@ -110,6 +117,22 @@ function formatSceneRange(scene: StudioScene) {
   return `${formatTimecode(scene.startSeconds).slice(0, 8)} – ${formatTimecode(
     scene.startSeconds + scene.durationSeconds,
   ).slice(0, 8)}`;
+}
+
+function formatFileSize(value: number | null) {
+  if (!value) return 'Size unavailable';
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(value / 1024))} KB`;
+}
+
+function composeProviderPrompt(scene: StudioScene) {
+  return [
+    scene.prompt.trim(),
+    `Cinemoriq direction: ${scene.visualStyle} visual language; ${scene.lensMm}mm lens; ${scene.lighting} lighting.`,
+    'Preserve the approved product, brand, identity, and safety constraints. Do not add readable claims or logos that are not present in approved references.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 function versionStatus(version: StudioVersion): {
@@ -159,6 +182,48 @@ async function readGenerationResponse(response: Response) {
     throw new Error(message);
   }
   return payload;
+}
+
+async function readGenerationJobsResponse(response: Response) {
+  const payload = (await response.json().catch(() => null)) as
+    | GenerationJobsResponse
+    | GenerationApiError
+    | null;
+  if (!response.ok || !payload || !('jobs' in payload)) {
+    const message = payload && 'error' in payload
+      ? payload.error.message
+      : 'Cinemoriq could not recover generation history.';
+    throw new Error(message);
+  }
+  return payload;
+}
+
+function mergeGenerationJob(
+  current: StudioVersion,
+  job: GenerationJobView,
+): StudioVersion {
+  return {
+    ...current,
+    mediaSrc: job.mediaUrl ?? current.mediaSrc,
+    mediaType: job.mediaUrl ? 'video' : current.mediaType,
+    illustrative: false,
+    generationState:
+      job.status === 'succeeded'
+        ? 'ready'
+        : job.status === 'failed'
+          ? 'failed'
+          : job.status === 'cancelled'
+            ? 'cancelled'
+            : job.status === 'submitting' || job.status === 'queued'
+              ? 'queued'
+              : 'generating',
+    generationProgress: job.progress,
+    generationJobId: job.id,
+    generationError: job.error,
+    outputMetadata: job.output,
+    approvalState: job.reviewState,
+    reviewedAt: job.reviewedAt,
+  };
 }
 
 function StudioSkeleton() {
@@ -293,7 +358,7 @@ function SceneRail({
               onKeyDown={(event) => handleKeyboard(event, index)}
             >
               <span className="studio-scene-thumb">
-                {mediaUnavailable ? (
+                {mediaUnavailable || version.mediaType === 'video' ? (
                   <Film size={19} aria-hidden="true" />
                 ) : (
                   <Image
@@ -463,6 +528,29 @@ function StudioPreview({
           {model.providerLabel} preset · {model.name}
         </span>
       </div>
+      {version.generationError ? (
+        <div className="studio-result-alert" role="alert">
+          <AlertTriangle size={15} aria-hidden="true" />
+          <span><strong>Generation needs attention</strong>{version.generationError}</span>
+        </div>
+      ) : null}
+      {version.outputMetadata && version.mediaSrc ? (
+        <div className="studio-result-metadata" aria-label="Generated video metadata">
+          <span className="studio-result-metadata__icon"><FileOutput size={16} /></span>
+          <span><small>Provider</small><strong>{model.providerLabel}</strong></span>
+          <span><small>Duration</small><strong>{version.outputMetadata.durationSeconds ? `${version.outputMetadata.durationSeconds}s` : 'Provider-set'}</strong></span>
+          <span><small>File</small><strong>{formatFileSize(version.outputMetadata.fileSize)}</strong></span>
+          <span><small>Audio</small><strong>{version.outputMetadata.hasAudio === null ? 'Unknown' : version.outputMetadata.hasAudio ? 'Included' : 'None'}</strong></span>
+          <a
+            className="button button--secondary button--sm studio-result-download"
+            href={version.mediaSrc}
+            download={version.outputMetadata.fileName ?? `${scene.id}-v${version.number}.mp4`}
+          >
+            <Download size={14} aria-hidden="true" />
+            <span>Download</span>
+          </a>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -635,6 +723,8 @@ function AIDirectorPanel({
     scene.generationConfig,
     scene.prompt,
   );
+  const generationEstimate = estimateGenerationCost(scene.generationConfig);
+  const costWithinLimit = generationEstimate.amount <= GENERATION_COST_LIMIT_USD;
   const canReview =
     version.generationState === 'ready' &&
     Boolean(version.mediaSrc) &&
@@ -654,7 +744,7 @@ function AIDirectorPanel({
           {running
             ? 'Generating'
             : providerReady && backendReady
-              ? 'Connected'
+              ? 'Key detected'
               : 'Connection required'}
         </StatusBadge>
       </div>
@@ -761,6 +851,10 @@ function AIDirectorPanel({
             Connect this model&apos;s server key in Settings before starting a paid
             generation.
           </p>
+        ) : !costWithinLimit ? (
+          <p className="studio-lock-notice" role="alert">
+            This setup exceeds the ${GENERATION_COST_LIMIT_USD.toFixed(2)} per-generation safety limit.
+          </p>
         ) : null}
       </div>
 
@@ -774,7 +868,7 @@ function AIDirectorPanel({
             variant="primary"
             size="lg"
             leadingIcon={<Sparkles size={17} />}
-            disabled={locked || !providerReady || !backendReady || generationErrors.length > 0}
+            disabled={locked || !providerReady || !backendReady || !costWithinLimit || generationErrors.length > 0}
             onClick={() =>
               void onGenerate(
                 version.generationState === 'failed' ||
@@ -822,15 +916,19 @@ export function CreativeStudioScreen() {
   const [notice, setNotice] = useState('');
   const [directorOpen, setDirectorOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [generationConfirmOpen, setGenerationConfirmOpen] = useState(false);
+  const [generationRetryRequested, setGenerationRetryRequested] = useState(false);
   const [brokenMedia, setBrokenMedia] = useState<Set<string>>(new Set());
   const [connections, setConnections] = useState<ConnectionStatusResponse>(
     EMPTY_CONNECTION_STATUS,
   );
   const pollTimersRef = useRef<Map<string, number>>(new Map());
   const generationLockRef = useRef(false);
+  const historyCampaignRef = useRef<string | null>(null);
   const hydratedRef = useRef(false);
   const playbackDuration = session ? getStudioDuration(session) : 0;
   const playbackCampaignId = session?.campaignId;
+  const recoveryCampaignId = session?.campaignId ?? null;
 
   const clearGenerationPolling = useCallback(() => {
     pollTimersRef.current.forEach((timer) => window.clearTimeout(timer));
@@ -978,28 +1076,7 @@ export function CreativeStudioScreen() {
   const applyGenerationJob = useCallback(
     (sceneId: string, versionId: string, response: GenerationJobResponse) => {
       const { job } = response;
-      updateVersion(sceneId, versionId, (current) => ({
-        ...current,
-        mediaSrc: job.mediaUrl ?? current.mediaSrc,
-        mediaType: job.mediaUrl ? 'video' : current.mediaType,
-        illustrative: false,
-        generationState:
-          job.status === 'succeeded'
-            ? 'ready'
-            : job.status === 'failed'
-              ? 'failed'
-              : job.status === 'cancelled'
-                ? 'cancelled'
-                : job.status === 'submitting' || job.status === 'queued'
-                  ? 'queued'
-                  : 'generating',
-        generationProgress: job.progress,
-        generationJobId: job.id,
-        generationError: job.error,
-        outputMetadata: job.output,
-        approvalState: job.reviewState,
-        reviewedAt: job.reviewedAt,
-      }));
+      updateVersion(sceneId, versionId, (current) => mergeGenerationJob(current, job));
       if (job.mediaUrl) {
         setBrokenMedia((current) => {
           const next = new Set(current);
@@ -1010,6 +1087,67 @@ export function CreativeStudioScreen() {
     },
     [updateVersion],
   );
+
+  const recoverGenerationJob = useCallback((job: GenerationJobView) => {
+    setSession((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        scenes: current.scenes.map((item) => {
+          if (item.id !== job.sceneId) return item;
+          const existing = item.versions.find(
+            (candidate) => candidate.id === job.versionId,
+          );
+          if (existing) {
+            return {
+              ...item,
+              versions: item.versions.map((candidate) =>
+                candidate.id === job.versionId
+                  ? mergeGenerationJob(candidate, job)
+                  : candidate,
+              ),
+            };
+          }
+          const nextNumber = Math.max(
+            1,
+            ...item.versions.map((candidate) => candidate.number + 1),
+          );
+          const recovered = mergeGenerationJob(
+            {
+              id: job.versionId,
+              number: nextNumber,
+              createdAt: job.createdAt,
+              mediaSrc: null,
+              mediaType: 'video',
+              mediaAlt: `${item.title} generated video, recovered version ${nextNumber}`,
+              illustrative: false,
+              generationState: 'queued',
+              generationProgress: 0,
+              generationJobId: job.id,
+              submissionKey: null,
+              generationError: null,
+              outputMetadata: null,
+              approvalState: 'draft',
+              reviewedAt: null,
+            },
+            job,
+          );
+          return {
+            ...item,
+            selectedVersionId: job.versionId,
+            versions: [...item.versions, recovered].slice(-12),
+          };
+        }),
+      };
+    });
+    if (job.mediaUrl) {
+      setBrokenMedia((current) => {
+        const next = new Set(current);
+        next.delete(job.versionId);
+        return next;
+      });
+    }
+  }, []);
 
   type PollScheduler = (
     sceneId: string,
@@ -1058,6 +1196,59 @@ export function CreativeStudioScreen() {
   useEffect(() => {
     schedulePollRef.current = scheduleGenerationPoll;
   }, [scheduleGenerationPoll]);
+
+  useEffect(() => {
+    if (
+      loadState !== 'ready' ||
+      !recoveryCampaignId ||
+      !connections.database.configured ||
+      historyCampaignRef.current === recoveryCampaignId
+    ) {
+      return;
+    }
+    let active = true;
+    const campaignId = recoveryCampaignId;
+    historyCampaignRef.current = campaignId;
+    void fetch(
+      `/api/studio/generations?campaignId=${encodeURIComponent(campaignId)}`,
+      { cache: 'no-store' },
+    )
+      .then(readGenerationJobsResponse)
+      .then((payload) => {
+        if (!active) return;
+        payload.jobs
+          .slice()
+          .reverse()
+          .forEach((job) => {
+            recoverGenerationJob(job);
+            if (!['succeeded', 'failed', 'cancelled'].includes(job.status)) {
+              schedulePollRef.current(
+                job.sceneId,
+                job.versionId,
+                job.id,
+                250,
+              );
+            }
+          });
+        if (payload.jobs.length) {
+          setNotice(
+            `Recovered ${payload.jobs.length} durable generation ${payload.jobs.length === 1 ? 'job' : 'jobs'} from Cinemoriq storage.`,
+          );
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        historyCampaignRef.current = null;
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : 'Generation history could not be recovered.',
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [connections.database.configured, loadState, recoverGenerationJob, recoveryCampaignId]);
 
   useEffect(() => {
     if (loadState !== 'ready' || !session) return;
@@ -1144,6 +1335,12 @@ export function CreativeStudioScreen() {
     setPlaying((current) => !current);
   }
 
+  function requestGenerationConfirmation(retryCurrent = false) {
+    if (!scene || !version || record?.paused || generationLockRef.current) return;
+    setGenerationRetryRequested(retryCurrent);
+    setGenerationConfirmOpen(true);
+  }
+
   async function startGeneration(retryCurrent = false) {
     if (
       !scene ||
@@ -1165,8 +1362,10 @@ export function CreativeStudioScreen() {
       return;
     }
     const estimate = estimateGenerationCost(scene.generationConfig).amount;
-    if (estimate === null) {
-      setNotice('Choose a fixed duration so Cinemoriq can enforce a maximum paid cost.');
+    if (estimate > GENERATION_COST_LIMIT_USD) {
+      setNotice(
+        `This request exceeds Cinemoriq's $${GENERATION_COST_LIMIT_USD.toFixed(2)} per-generation safety limit.`,
+      );
       return;
     }
     generationLockRef.current = true;
@@ -1248,14 +1447,17 @@ export function CreativeStudioScreen() {
             campaignId: session?.campaignId,
             sceneId,
             versionId: targetVersionId,
-            prompt: scene.prompt,
+            prompt: composeProviderPrompt(scene),
             config: scene.generationConfig,
             confirmations: {
               assetRights: Boolean(record?.draft.confirmAssetRights),
               noUnauthorizedIdentity: Boolean(record?.draft.confirmNoUnauthorizedIdentity),
               humanReview: Boolean(record?.draft.confirmHumanReview),
             },
-            maximumCostUsd: Math.min(10, Math.max(estimate + 0.5, estimate * 1.2)),
+            maximumCostUsd: Math.min(
+              GENERATION_COST_LIMIT_USD,
+              Math.max(estimate + 0.5, estimate * 1.2),
+            ),
           }),
         }),
       );
@@ -1281,6 +1483,12 @@ export function CreativeStudioScreen() {
     } finally {
       generationLockRef.current = false;
     }
+  }
+
+  async function confirmGeneration() {
+    const retryCurrent = generationRetryRequested;
+    setGenerationConfirmOpen(false);
+    await startGeneration(retryCurrent);
   }
 
   async function cancelGeneration() {
@@ -1418,6 +1626,12 @@ export function CreativeStudioScreen() {
     record.kind === 'sample'
       ? `/campaigns/workspace?demo=${DEMO_CAMPAIGN_ID}`
       : `/campaigns/workspace?campaign=${encodeURIComponent(record.id)}`;
+  const generationEstimate = estimateGenerationCost(scene.generationConfig);
+  const generationMaximum = Math.min(
+    GENERATION_COST_LIMIT_USD,
+    Math.max(generationEstimate.amount + 0.5, generationEstimate.amount * 1.2),
+  );
+  const finalProviderPrompt = composeProviderPrompt(scene);
 
   const directorProps = {
     scene,
@@ -1427,7 +1641,7 @@ export function CreativeStudioScreen() {
     providerReady,
     backendReady,
     onUpdateScene: updateScene,
-    onGenerate: startGeneration,
+    onGenerate: requestGenerationConfirmation,
     onCancel: cancelGeneration,
     onRequestChanges: requestChanges,
     onApprove: () => setApprovalOpen(true),
@@ -1542,6 +1756,51 @@ export function CreativeStudioScreen() {
           <AIDirectorPanel controlIdPrefix="drawer" {...directorProps} />
         </div>
       </Drawer>
+
+      <Modal
+        open={generationConfirmOpen}
+        onClose={() => setGenerationConfirmOpen(false)}
+        eyebrow="Paid provider request"
+        title={`Generate ${scene.title} with ${getVideoModel(scene.generationConfig.modelKey).name}?`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setGenerationConfirmOpen(false)}>
+              Review settings
+            </Button>
+            <Button
+              variant="primary"
+              leadingIcon={<Sparkles size={16} />}
+              onClick={() => void confirmGeneration()}
+            >
+              Authorize up to ${generationMaximum.toFixed(2)}
+            </Button>
+          </>
+        }
+      >
+        <div className="studio-cost-confirmation">
+          <span className="studio-cost-confirmation__icon">
+            <CircleDollarSign size={23} aria-hidden="true" />
+          </span>
+          <div className="studio-cost-confirmation__copy">
+            <strong>Review the exact provider request before billing starts.</strong>
+            <p>
+              Estimated cost is {generationEstimate.label}. Cinemoriq enforces a
+              ${generationMaximum.toFixed(2)} maximum for this request; fal.ai&apos;s
+              final metered charge remains authoritative.
+            </p>
+          </div>
+          <div className="studio-cost-confirmation__specs">
+            <span><small>Mode</small><strong>{scene.generationConfig.mode.replaceAll('-', ' ')}</strong></span>
+            <span><small>Duration</small><strong>{formatGenerationDuration(scene.generationConfig.duration)}</strong></span>
+            <span><small>Resolution</small><strong>{getResolutionLabel(scene.generationConfig.modelKey, scene.generationConfig.resolution).split(' · ')[0]}</strong></span>
+            <span><small>Audio</small><strong>{scene.generationConfig.audioEnabled ? 'Enabled' : 'Off'}</strong></span>
+          </div>
+          <details className="studio-final-prompt">
+            <summary>Final prompt sent to the provider</summary>
+            <pre>{finalProviderPrompt}</pre>
+          </details>
+        </div>
+      </Modal>
 
       <Modal
         open={approvalOpen}

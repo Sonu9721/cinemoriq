@@ -1,6 +1,7 @@
 import type { GenerationJobRow } from '../../db/schema';
 import {
   estimateGenerationCost,
+  GENERATION_COST_LIMIT_USD,
   getAspectOptions,
   getResolutionOptions,
   getVideoModel,
@@ -26,7 +27,9 @@ import {
   countRecentGenerationJobs,
   getGenerationJob,
   getGenerationJobByIdempotencyKey,
+  getGenerationJobByVersion,
   insertGenerationJob,
+  listGenerationJobsForCampaign,
   updateGenerationJob,
   updateGenerationJobIfCurrent,
 } from './generation-jobs';
@@ -40,7 +43,6 @@ import {
 } from './generation-providers';
 import { getRuntimeEnv } from './runtime-env';
 
-const MAXIMUM_GENERATION_COST_USD = 10;
 const MAXIMUM_MEDIA_BYTES = 500 * 1024 * 1024;
 const ACTIVE_JOB_LIMIT = 2;
 const SUBMISSION_LIMIT_PER_MINUTE = 5;
@@ -205,8 +207,8 @@ export function parseGenerationSubmission(value: unknown): GenerationSubmission 
   if (!Object.values(submission.confirmations).every(Boolean)) {
     throw new GenerationApiException(403, 'GUARDRAILS_REQUIRED', 'Confirm asset rights, identity authorization, and human review before generation.');
   }
-  if (!Number.isFinite(submission.maximumCostUsd) || submission.maximumCostUsd <= 0 || submission.maximumCostUsd > MAXIMUM_GENERATION_COST_USD) {
-    throw new GenerationApiException(400, 'INVALID_COST_LIMIT', `Maximum cost must be between $0.01 and $${MAXIMUM_GENERATION_COST_USD.toFixed(2)}.`);
+  if (!Number.isFinite(submission.maximumCostUsd) || submission.maximumCostUsd <= 0 || submission.maximumCostUsd > GENERATION_COST_LIMIT_USD) {
+    throw new GenerationApiException(400, 'INVALID_COST_LIMIT', `Maximum cost must be between $0.01 and $${GENERATION_COST_LIMIT_USD.toFixed(2)}.`);
   }
   const errors = validateGenerationConfig(submission.config, submission.prompt);
   if (errors.length) throw new GenerationApiException(400, 'INVALID_MODEL_CONFIG', errors[0]);
@@ -225,6 +227,21 @@ async function hashRequest(value: unknown) {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function storageSafeSubmission(submission: GenerationSubmission): GenerationSubmission {
+  return {
+    ...submission,
+    config: {
+      ...submission.config,
+      // Temporary fal CDN input URLs are intentionally not retained in D1.
+      startImageUrl: '',
+      endImageUrl: '',
+      referenceImageUrls: [],
+      referenceVideoUrls: [],
+      referenceAudioUrls: [],
+    },
+  };
 }
 
 function parseOutput(row: GenerationJobRow) {
@@ -248,6 +265,9 @@ export function toGenerationJobResponse(row: GenerationJobRow): GenerationJobRes
   const status = row.status as GenerationJobStatus;
   const job: GenerationJobView = {
     id: row.id,
+    campaignId: row.campaign_id,
+    sceneId: row.scene_id,
+    versionId: row.version_id,
     provider: row.provider,
     modelKey: row.model_key as StudioVideoModelKey,
     mode: row.generation_mode as StudioGenerationMode,
@@ -299,6 +319,20 @@ export async function submitGeneration(request: Request, body: unknown) {
     }
     return toGenerationJobResponse(existing);
   }
+  const existingVersion = await getGenerationJobByVersion(
+    submission.sceneId,
+    submission.versionId,
+  );
+  if (existingVersion) {
+    if (existingVersion.request_hash === requestHash) {
+      return toGenerationJobResponse(existingVersion);
+    }
+    throw new GenerationApiException(
+      409,
+      'VERSION_ALREADY_SUBMITTED',
+      'This exact scene version already has a provider job. Open its stored result or create a new variant.',
+    );
+  }
 
   if ((await countActiveGenerationJobs()) >= ACTIVE_JOB_LIMIT) {
     throw new GenerationApiException(429, 'ACTIVE_JOB_LIMIT', 'Wait for an active generation to finish before starting another.', true);
@@ -312,10 +346,7 @@ export async function submitGeneration(request: Request, body: unknown) {
   const provider = model.provider;
   const secret = providerSecret(provider);
   const cost = estimateGenerationCost(submission.config);
-  if (cost.amount === null) {
-    throw new GenerationApiException(400, 'COST_NOT_BOUNDED', 'Choose a fixed duration before starting a paid generation.');
-  }
-  if (cost.amount > submission.maximumCostUsd || cost.amount > MAXIMUM_GENERATION_COST_USD) {
+  if (cost.amount > submission.maximumCostUsd || cost.amount > GENERATION_COST_LIMIT_USD) {
     throw new GenerationApiException(409, 'COST_LIMIT_EXCEEDED', `Estimated cost $${cost.amount.toFixed(2)} exceeds the approved maximum.`);
   }
   const now = new Date().toISOString();
@@ -337,7 +368,7 @@ export async function submitGeneration(request: Request, body: unknown) {
     provider_status_url: null,
     provider_response_url: null,
     provider_cancel_url: null,
-    input_json: JSON.stringify(submission),
+    input_json: JSON.stringify(storageSafeSubmission(submission)),
     request_hash: requestHash,
     output_json: null,
     object_key: null,
@@ -349,6 +380,7 @@ export async function submitGeneration(request: Request, body: unknown) {
     maximum_cost_usd: submission.maximumCostUsd,
     next_poll_at: null,
     poll_lease_until: null,
+    poll_error_count: 0,
     cancellation_requested_at: null,
     review_state: 'draft',
     reviewed_at: null,
@@ -361,6 +393,13 @@ export async function submitGeneration(request: Request, body: unknown) {
   } catch (error) {
     const raced = await getGenerationJobByIdempotencyKey(idempotencyKey);
     if (raced?.request_hash === requestHash) return toGenerationJobResponse(raced);
+    const racedVersion = await getGenerationJobByVersion(
+      submission.sceneId,
+      submission.versionId,
+    );
+    if (racedVersion?.request_hash === requestHash) {
+      return toGenerationJobResponse(racedVersion);
+    }
     throw error;
   }
 
@@ -572,6 +611,7 @@ export async function refreshGeneration(id: string) {
           progress: result.progress,
           error_code: null,
           error_message: null,
+          poll_error_count: 0,
           next_poll_at: Date.now() + result.nextPollMs,
           poll_lease_until: null,
           updated_at: new Date().toISOString(),
@@ -647,6 +687,7 @@ export async function refreshGeneration(id: string) {
         file_size: stored.fileSize,
         provider_response_url: null,
         poll_lease_until: null,
+        poll_error_count: 0,
         review_state: 'in-review',
         completed_at: completedAt,
         updated_at: completedAt,
@@ -677,17 +718,24 @@ export async function refreshGeneration(id: string) {
       );
       return toGenerationJobResponse(cancelled.row ?? row);
     }
-    if (
-      error instanceof ProviderRequestError ||
-      (error instanceof GenerationApiException && error.retryable)
-    ) {
+    const retryable =
+      (error instanceof ProviderRequestError && error.retryable) ||
+      (error instanceof GenerationApiException && error.retryable);
+    const nextErrorCount = row.poll_error_count + 1;
+    const maximumRetries = row.status === 'storing' ? 144 : 12;
+    if (retryable && nextErrorCount <= maximumRetries) {
+      const retryDelay = Math.min(
+        60_000,
+        5_000 * 2 ** Math.min(nextErrorCount - 1, 4),
+      );
       const updated = await updateGenerationJobIfCurrent(
         id,
         [expectedStatus],
         expectedLease,
         {
-          next_poll_at: Date.now() + 10_000,
+          next_poll_at: Date.now() + retryDelay,
           poll_lease_until: null,
+          poll_error_count: nextErrorCount,
           error_code:
             error instanceof ProviderRequestError ? error.code : 'FINALIZATION_RETRY',
           error_message: `${error.message} The paid job is preserved and will be retried.`.slice(
@@ -711,6 +759,7 @@ export async function refreshGeneration(id: string) {
             ? error.code
             : 'FINALIZATION_FAILED',
         error_message: message.slice(0, 500),
+        poll_error_count: nextErrorCount,
         completed_at: new Date().toISOString(),
         poll_lease_until: null,
         updated_at: new Date().toISOString(),
@@ -718,6 +767,19 @@ export async function refreshGeneration(id: string) {
     );
     return toGenerationJobResponse(updated.row ?? row);
   }
+}
+
+export async function listCampaignGenerations(campaignId: string) {
+  assertInfrastructure();
+  if (!/^[A-Za-z0-9._:-]{1,160}$/.test(campaignId)) {
+    throw new GenerationApiException(
+      400,
+      'INVALID_CAMPAIGN_ID',
+      'Choose a valid campaign before loading generation history.',
+    );
+  }
+  const rows = await listGenerationJobsForCampaign(campaignId);
+  return { jobs: rows.map((row) => toGenerationJobResponse(row).job) };
 }
 
 export async function cancelGeneration(id: string) {

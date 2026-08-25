@@ -3,6 +3,7 @@ import {
   GENERATION_JOBS_IDEMPOTENCY_INDEX_SQL,
   GENERATION_JOBS_PROVIDER_INDEX_SQL,
   GENERATION_JOBS_TABLE_SQL,
+  GENERATION_JOBS_VERSION_INDEX_SQL,
   type GenerationJobRow,
 } from '../../db/schema';
 import { getRuntimeEnv } from './runtime-env';
@@ -35,6 +36,7 @@ const generationJobColumns = [
   'maximum_cost_usd',
   'next_poll_at',
   'poll_lease_until',
+  'poll_error_count',
   'cancellation_requested_at',
   'review_state',
   'reviewed_at',
@@ -60,6 +62,7 @@ export async function ensureGenerationSchema() {
     database.prepare(GENERATION_JOBS_ACTIVE_INDEX_SQL),
     database.prepare(GENERATION_JOBS_IDEMPOTENCY_INDEX_SQL),
     database.prepare(GENERATION_JOBS_PROVIDER_INDEX_SQL),
+    database.prepare(GENERATION_JOBS_VERSION_INDEX_SQL),
     database.prepare('PRAGMA optimize'),
   ]);
   return database;
@@ -71,6 +74,30 @@ export async function getGenerationJobByIdempotencyKey(idempotencyKey: string) {
     .prepare('SELECT * FROM generation_jobs WHERE idempotency_key = ? LIMIT 1')
     .bind(idempotencyKey)
     .first<GenerationJobRow>();
+}
+
+export async function getGenerationJobByVersion(sceneId: string, versionId: string) {
+  const database = await ensureGenerationSchema();
+  return database
+    .prepare(
+      'SELECT * FROM generation_jobs WHERE scene_id = ? AND version_id = ? LIMIT 1',
+    )
+    .bind(sceneId, versionId)
+    .first<GenerationJobRow>();
+}
+
+export async function listGenerationJobsForCampaign(campaignId: string) {
+  const database = await ensureGenerationSchema();
+  const result = await database
+    .prepare(
+      `SELECT * FROM generation_jobs
+       WHERE campaign_id = ?
+       ORDER BY created_at DESC
+       LIMIT 100`,
+    )
+    .bind(campaignId)
+    .all<GenerationJobRow>();
+  return result.results ?? [];
 }
 
 export async function countActiveGenerationJobs() {

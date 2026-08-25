@@ -27,6 +27,7 @@ export const GENERATION_JOBS_TABLE_SQL = `
     maximum_cost_usd REAL NOT NULL,
     next_poll_at INTEGER,
     poll_lease_until INTEGER,
+    poll_error_count INTEGER NOT NULL DEFAULT 0,
     cancellation_requested_at TEXT,
     review_state TEXT NOT NULL DEFAULT 'draft',
     reviewed_at TEXT,
@@ -50,6 +51,11 @@ export const GENERATION_JOBS_PROVIDER_INDEX_SQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS idx_generation_jobs_provider_request
   ON generation_jobs(provider, provider_request_id)
   WHERE provider_request_id IS NOT NULL
+`;
+
+export const GENERATION_JOBS_VERSION_INDEX_SQL = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_generation_jobs_scene_version
+  ON generation_jobs(scene_id, version_id)
 `;
 
 export type GenerationJobRow = {
@@ -80,6 +86,7 @@ export type GenerationJobRow = {
   maximum_cost_usd: number;
   next_poll_at: number | null;
   poll_lease_until: number | null;
+  poll_error_count: number;
   cancellation_requested_at: string | null;
   review_state: 'draft' | 'in-review' | 'approved' | 'changes-requested';
   reviewed_at: string | null;

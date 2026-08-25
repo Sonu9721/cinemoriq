@@ -1,7 +1,22 @@
 import { assertSameOrigin, jsonError, readLimitedJson } from '../../../../lib/server/api-errors';
-import { submitGeneration } from '../../../../lib/server/generation-service';
+import {
+  listCampaignGenerations,
+  submitGeneration,
+} from '../../../../lib/server/generation-service';
 
 export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
+  try {
+    const campaignId = new URL(request.url).searchParams.get('campaignId') ?? '';
+    const response = await listCampaignGenerations(campaignId);
+    return Response.json(response, {
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
 
 export async function POST(request: Request) {
   try {

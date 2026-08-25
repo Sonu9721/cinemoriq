@@ -47,6 +47,9 @@ export type GenerationOutputMetadata = {
 
 export type GenerationJobView = {
   id: string;
+  campaignId: string | null;
+  sceneId: string;
+  versionId: string;
   provider: StudioModelProvider;
   modelKey: StudioVideoModelKey;
   mode: StudioGenerationConfig['mode'];
@@ -69,6 +72,10 @@ export type GenerationJobResponse = {
   pollAfterMs: number;
 };
 
+export type GenerationJobsResponse = {
+  jobs: GenerationJobView[];
+};
+
 export type GenerationApiError = {
   error: {
     code: string;
@@ -83,6 +90,22 @@ export type ConnectionStatusResponse = {
   minimax: { configured: boolean };
   database: { configured: boolean };
   mediaStorage: { configured: boolean };
+};
+
+export const STUDIO_ASSET_KINDS = ['image', 'video', 'audio'] as const;
+
+export type StudioAssetKind = (typeof STUDIO_ASSET_KINDS)[number];
+
+export type FalUploadInitiationResponse = {
+  upload: {
+    uploadUrl: string;
+    fileUrl: string;
+    expiresAt: string;
+    fileName: string;
+    mimeType: string;
+    byteSize: number;
+    kind: StudioAssetKind;
+  };
 };
 
 export function isTerminalGenerationStatus(status: GenerationJobStatus) {

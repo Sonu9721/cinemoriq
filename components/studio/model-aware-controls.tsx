@@ -31,6 +31,7 @@ import {
   type StudioGenerationMode,
   type StudioVideoModelKey,
 } from './video-model-catalog';
+import { AssetUploadField } from './asset-upload-field';
 
 type ReferenceKind = 'image' | 'video' | 'audio';
 
@@ -44,12 +45,16 @@ const referenceCopy: Record<
 };
 
 function ReferenceUrlList({
+  idPrefix,
+  modelKey,
   kind,
   values,
   max,
   disabled,
   onChange,
 }: {
+  idPrefix: string;
+  modelKey: StudioVideoModelKey;
   kind: ReferenceKind;
   values: string[];
   max: number;
@@ -79,15 +84,14 @@ function ReferenceUrlList({
       </div>
       {rows.map((value, index) => (
         <div className="studio-reference-row" key={`${kind}-${index}`}>
-          <Input
-            id={`studio-${kind}-reference-${index}`}
-            type="url"
-            inputMode="url"
-            aria-label={`${copy.singular} ${index + 1} URL`}
-            placeholder="https://cdn.example.com/asset"
+          <AssetUploadField
+            id={`${idPrefix}-${kind}-reference-${index}`}
+            label={`${copy.singular} ${index + 1}`}
+            kind={kind}
+            modelKey={modelKey}
             value={value}
             disabled={disabled}
-            onChange={(event) => update(index, event.target.value)}
+            onChange={(nextValue) => update(index, nextValue)}
           />
           <Button
             variant="ghost"
@@ -334,27 +338,25 @@ export function ModelAwareGenerationControls({
 
       {mode.requiresStartImage ? (
         <div className="studio-keyframe-fields">
-          <Input
+          <AssetUploadField
             id={`scene-start-image-${sceneId}`}
-            label="Start frame URL"
-            type="url"
-            inputMode="url"
-            placeholder="https://cdn.example.com/start-frame.webp"
+            label="Start frame"
+            kind="image"
+            modelKey={config.modelKey}
             value={config.startImageUrl}
             disabled={disabled}
-            onChange={(event) => update({ startImageUrl: event.target.value })}
-            hint="Public HTTPS image URL · Cinemoriq validates it before provider submission"
+            onChange={(startImageUrl) => update({ startImageUrl })}
           />
           {mode.requiresEndImage || config.mode === 'image-to-video' ? (
-            <Input
+            <AssetUploadField
               id={`scene-end-image-${sceneId}`}
-              label={mode.requiresEndImage ? 'End frame URL' : 'End frame URL · optional'}
-              type="url"
-              inputMode="url"
-              placeholder="https://cdn.example.com/end-frame.webp"
+              label="End frame"
+              kind="image"
+              modelKey={config.modelKey}
+              optional={!mode.requiresEndImage}
               value={config.endImageUrl}
               disabled={disabled}
-              onChange={(event) => update({ endImageUrl: event.target.value })}
+              onChange={(endImageUrl) => update({ endImageUrl })}
             />
           ) : null}
         </div>
@@ -369,6 +371,8 @@ export function ModelAwareGenerationControls({
           <p>{mode.references.note}</p>
           {mode.references.images > 0 ? (
             <ReferenceUrlList
+              idPrefix={sceneId}
+              modelKey={config.modelKey}
               kind="image"
               values={config.referenceImageUrls}
               max={mode.references.images}
@@ -378,6 +382,8 @@ export function ModelAwareGenerationControls({
           ) : null}
           {mode.references.videos > 0 ? (
             <ReferenceUrlList
+              idPrefix={sceneId}
+              modelKey={config.modelKey}
               kind="video"
               values={config.referenceVideoUrls}
               max={mode.references.videos}
@@ -387,6 +393,8 @@ export function ModelAwareGenerationControls({
           ) : null}
           {mode.references.audio > 0 ? (
             <ReferenceUrlList
+              idPrefix={sceneId}
+              modelKey={config.modelKey}
               kind="audio"
               values={config.referenceAudioUrls}
               max={mode.references.audio}
