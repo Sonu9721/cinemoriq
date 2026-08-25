@@ -12,7 +12,7 @@
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .wrangler",
     "preview:cloudflare": "npm run build && wrangler dev --config dist/server/wrangler.json",
-    "deploy:cloudflare": "npm run build && wrangler deploy --config dist/server/wrangler.json --name cinemoriq --var SITE_ORIGIN:https://cinemoriq.cinemoriq.workers.dev"
+    "deploy:cloudflare": "wrangler deploy --config cloudflare-redirect/wrangler.jsonc"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",

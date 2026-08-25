@@ -107,15 +107,22 @@ public to anyone who knows their unguessable URL and expire after 24 hours.
 Successful provider outputs are copied into Cinemoriq's private R2 bucket before
 review and download.
 
-## Cloudflare deployment
+## Cloudflare browser redirect
 
-The application is built for the Cloudflare Workers runtime. After authenticating Wrangler:
+The password-protected Sites deployment is the canonical Cinemoriq application.
+The legacy `cinemoriq.cinemoriq.workers.dev` address is maintained as a small
+browser redirect so old bookmarks always land on that protected application
+instead of opening an independent, stale dashboard.
+
+After authenticating Wrangler, publish the redirect with:
 
 ```bash
 npm run deploy:cloudflare
 ```
 
-The deployment command publishes the canonical Worker at `cinemoriq.cinemoriq.workers.dev` and configures that address as the metadata origin. Update `SITE_ORIGIN` in the deployment command when connecting a custom domain.
+The redirect preserves the requested path and query string, does not cache the
+redirect response, and keeps authentication, generation records, media storage,
+and provider secrets in one canonical deployment.
 
 For a local Workers-runtime preview:
 
