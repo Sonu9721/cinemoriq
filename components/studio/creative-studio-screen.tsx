@@ -20,7 +20,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
   useEffect,
@@ -36,6 +36,7 @@ import {
 import {
   ensureDemoCampaignRecord,
   loadCampaignRecord,
+  loadLatestCampaignRecord,
 } from '../campaigns/campaign-record-store';
 import { DashboardShell } from '../shell/dashboard-shell';
 import { Drawer, Modal } from '../ui/overlays';
@@ -563,7 +564,10 @@ function AIDirectorPanel({
 }) {
   const running = ['queued', 'generating'].includes(version.generationState);
   const locked = running || campaignPaused || !guardrailsReady;
-  const canReview = version.generationState === 'ready' && !campaignPaused;
+  const canReview =
+    version.generationState === 'ready' &&
+    Boolean(version.mediaSrc) &&
+    !campaignPaused;
 
   return (
     <div className="studio-director-content">
@@ -729,6 +733,9 @@ function AIDirectorPanel({
 
 export function CreativeStudioScreen() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedCampaignId = searchParams.get('campaign');
+  const demoRequested = searchParams.get('demo') === DEMO_CAMPAIGN_ID;
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [record, setRecord] = useState<CampaignRecord | null>(null);
   const [session, setSession] = useState<StudioSession | null>(null);
@@ -754,14 +761,11 @@ export function CreativeStudioScreen() {
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const demoRequested = params.get('demo') === DEMO_CAMPAIGN_ID;
-        const campaignId = params.get('campaign');
         const loadedRecord = demoRequested
           ? ensureDemoCampaignRecord()
-          : campaignId
-            ? loadCampaignRecord(campaignId)
-            : null;
+          : requestedCampaignId
+            ? loadCampaignRecord(requestedCampaignId)
+            : loadLatestCampaignRecord();
         if (!loadedRecord) {
           setLoadState('empty');
           return;
@@ -778,7 +782,7 @@ export function CreativeStudioScreen() {
       }
     }, 180);
     return () => window.clearTimeout(loadTimer);
-  }, []);
+  }, [demoRequested, requestedCampaignId]);
 
   useEffect(() => {
     if (!hydratedRef.current || !session) return;
@@ -1036,7 +1040,13 @@ export function CreativeStudioScreen() {
   }
 
   function requestChanges() {
-    if (!scene || !version || version.generationState !== 'ready' || record?.paused) {
+    if (
+      !scene ||
+      !version ||
+      version.generationState !== 'ready' ||
+      !version.mediaSrc ||
+      record?.paused
+    ) {
       return;
     }
     updateVersion(scene.id, version.id, (current) => ({
@@ -1131,7 +1141,7 @@ export function CreativeStudioScreen() {
             <Button
               variant="primary"
               leadingIcon={<Layers3 size={16} />}
-              disabled={!allApproved}
+              disabled
               title={allApproved ? 'Export backend is not connected' : 'Approve every scene before export'}
             >
               Export locked

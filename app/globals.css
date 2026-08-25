@@ -4167,6 +4167,11 @@ a {
   padding: var(--space-1);
 }
 
+.studio-timeline:has(#studio-playhead-slider:focus-visible) {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-focus);
+}
+
 .studio-timeline__toolbar {
   display: grid;
   min-height: 2.5rem;

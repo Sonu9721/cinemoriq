@@ -139,8 +139,11 @@ export function createStudioSession(record: CampaignRecord): StudioSession {
         mediaSrc: isDemo ? blueprint.mediaSrc : null,
         mediaAlt: blueprint.mediaAlt,
         illustrative: isDemo,
-        generationState:
-          isSelected && isDemo ? blueprint.generationState : ('ready' as const),
+        generationState: isDemo
+          ? isSelected
+            ? blueprint.generationState
+            : ('ready' as const)
+          : ('idle' as const),
         generationProgress: isDemo ? 100 : 0,
         approvalState:
           isSelected && isDemo ? blueprint.approvalState : ('draft' as const),
