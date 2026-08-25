@@ -55,7 +55,7 @@ const primaryNavigation: NavItem[] = [
 ];
 
 const utilityNavigation: NavItem[] = [
-  { label: 'Settings', icon: Settings },
+  { label: 'Settings', icon: Settings, href: '/settings' },
   { label: 'Support', icon: CircleHelp },
 ];
 

@@ -6,12 +6,14 @@ import {
   FileOutput,
   Image as ImageIcon,
   Info,
+  KeyRound,
   Link2,
   Plus,
   Trash2,
   Video,
   Volume2,
 } from 'lucide-react';
+import Link from 'next/link';
 import { Button, Input, Select, StatusBadge, Textarea, cx } from '../ui/primitives';
 import {
   VIDEO_MODEL_CATALOG,
@@ -20,6 +22,7 @@ import {
   formatGenerationDuration,
   getAspectOptions,
   getModelMode,
+  getResolutionOptions,
   getResolutionLabel,
   getVideoModel,
   reconcileGenerationConfig,
@@ -136,6 +139,11 @@ export function ModelAwareGenerationControls({
   const aspectOptions = getAspectOptions(config.modelKey, config.mode);
   const estimate = estimateGenerationCost(config);
   const referenceCount = countReferences(config);
+  const resolutionOptions = getResolutionOptions(
+    config.modelKey,
+    config.duration,
+    config.mode,
+  );
 
   function update(patch: Partial<StudioGenerationConfig>) {
     onChange({ ...config, ...patch });
@@ -160,8 +168,13 @@ export function ModelAwareGenerationControls({
   function selectDuration(value: string) {
     const duration: StudioGenerationDuration =
       value === 'auto' ? 'auto' : Number(value);
-    onChange(
+    const next = reconcileGenerationConfig(
       { ...config, duration },
+      config.modelKey,
+      config.mode,
+    );
+    onChange(
+      next,
       typeof duration === 'number' ? duration : undefined,
     );
   }
@@ -176,7 +189,7 @@ export function ModelAwareGenerationControls({
         onChange={(event) =>
           selectModel(event.target.value as StudioVideoModelKey)
         }
-        hint="One secure fal.ai connection · model-specific controls"
+        hint="Primary fal.ai gateway · optional MiniMax Direct connection"
       >
         {VIDEO_MODEL_CATALOG.map((candidate) => (
           <option key={candidate.key} value={candidate.key}>
@@ -191,7 +204,9 @@ export function ModelAwareGenerationControls({
             <small>{model.maker}</small>
             <strong>{model.name}</strong>
           </div>
-          <StatusBadge tone="blue">fal.ai</StatusBadge>
+          <StatusBadge tone={model.provider === 'fal-ai' ? 'blue' : 'warning'}>
+            {model.providerLabel}
+          </StatusBadge>
         </div>
         <p>{model.description}</p>
         <div className="studio-capability-list" aria-label={`${model.name} capabilities`}>
@@ -203,6 +218,20 @@ export function ModelAwareGenerationControls({
           <Info size={13} /> Best for: {model.recommendedFor}
         </small>
       </div>
+
+      {model.provider === 'minimax-direct' ? (
+        <div className="studio-provider-notice">
+          <KeyRound size={17} aria-hidden="true" />
+          <div>
+            <strong>Separate MiniMax Platform connection required</strong>
+            <p>
+              This model uses the server-only {model.providerSecretName} secret.
+              Hailuo website welcome credits cannot authorize API renders.
+            </p>
+            <Link href="/settings">Open connection settings</Link>
+          </div>
+        </div>
+      ) : null}
 
       <Select
         id={`scene-mode-${sceneId}`}
@@ -239,10 +268,10 @@ export function ModelAwareGenerationControls({
           id={`scene-resolution-${sceneId}`}
           label="Resolution"
           value={config.resolution}
-          disabled={disabled || model.resolutions.length === 1}
+          disabled={disabled || resolutionOptions.length === 1}
           onChange={(event) => update({ resolution: event.target.value })}
         >
-          {model.resolutions.map((resolution) => (
+          {resolutionOptions.map((resolution) => (
             <option key={resolution.value} value={resolution.value}>
               {resolution.label}
             </option>
@@ -462,7 +491,9 @@ export function ModelAwareGenerationControls({
         <div>
           <strong>{model.pricingLabel}</strong>
           <p>{estimate.note}</p>
-          <small>Pricing checked {model.pricingVerifiedAt} · final fal.ai charge is authoritative.</small>
+          <small>
+            Pricing checked {model.pricingVerifiedAt} · final {model.providerLabel} charge is authoritative.
+          </small>
         </div>
       </div>
 
@@ -476,17 +507,16 @@ export function ModelAwareGenerationControls({
 
       {validationErrors.length ? (
         <div className="studio-config-errors" role="alert">
-          <strong>Complete before fal.ai generation</strong>
+          <strong>Complete before {model.providerLabel} generation</strong>
           <ul>
             {validationErrors.map((error) => <li key={error}>{error}</li>)}
           </ul>
         </div>
       ) : (
         <div className="studio-config-ready">
-          <FileOutput size={15} /> Model configuration is valid for the selected fal.ai endpoint.
+          <FileOutput size={15} /> Model configuration is valid for the selected {model.providerLabel} endpoint.
         </div>
       )}
     </div>
   );
 }
-

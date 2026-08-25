@@ -3,6 +3,7 @@ export const VIDEO_MODEL_KEYS = [
   'kling-v3-standard',
   'seedance-2.0',
   'minimax-h3',
+  'minimax-hailuo-02',
 ] as const;
 
 export const GENERATION_MODES = [
@@ -15,6 +16,7 @@ export const GENERATION_MODES = [
 export type StudioVideoModelKey = (typeof VIDEO_MODEL_KEYS)[number];
 export type StudioGenerationMode = (typeof GENERATION_MODES)[number];
 export type StudioGenerationDuration = number | 'auto';
+export type StudioModelProvider = 'fal-ai' | 'minimax-direct';
 
 export type StudioGenerationConfig = {
   modelKey: StudioVideoModelKey;
@@ -55,6 +57,7 @@ export type StudioModeDefinition = {
   description: string;
   endpointId: string;
   aspectRatios?: CatalogOption[];
+  resolutions?: CatalogOption[];
   references: StudioReferenceLimits;
   requiresStartImage?: boolean;
   requiresEndImage?: boolean;
@@ -62,6 +65,9 @@ export type StudioModeDefinition = {
 
 export type StudioVideoModelDefinition = {
   key: StudioVideoModelKey;
+  provider: StudioModelProvider;
+  providerLabel: string;
+  providerSecretName: 'FAL_KEY' | 'MINIMAX_API_KEY';
   name: string;
   maker: string;
   shortName: string;
@@ -140,9 +146,16 @@ const sourceAspectOption: CatalogOption[] = [
   { value: 'source', label: 'From source image' },
 ];
 
+const modelDefaultAspectOption: CatalogOption[] = [
+  { value: 'auto', label: 'Model default' },
+];
+
 export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
   {
     key: 'veo-3.1',
+    provider: 'fal-ai',
+    providerLabel: 'fal.ai',
+    providerSecretName: 'FAL_KEY',
     name: 'Veo 3.1',
     maker: 'Google',
     shortName: 'Veo',
@@ -212,6 +225,9 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
   },
   {
     key: 'kling-v3-standard',
+    provider: 'fal-ai',
+    providerLabel: 'fal.ai',
+    providerSecretName: 'FAL_KEY',
     name: 'Kling 3 Standard',
     maker: 'Kuaishou',
     shortName: 'Kling',
@@ -269,6 +285,9 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
   },
   {
     key: 'seedance-2.0',
+    provider: 'fal-ai',
+    providerLabel: 'fal.ai',
+    providerSecretName: 'FAL_KEY',
     name: 'Seedance 2.0',
     maker: 'ByteDance',
     shortName: 'Seedance',
@@ -335,6 +354,9 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
   },
   {
     key: 'minimax-h3',
+    provider: 'fal-ai',
+    providerLabel: 'fal.ai',
+    providerSecretName: 'FAL_KEY',
     name: 'MiniMax H3',
     maker: 'MiniMax',
     shortName: 'H3',
@@ -403,6 +425,68 @@ export const VIDEO_MODEL_CATALOG: StudioVideoModelDefinition[] = [
     pricingVerifiedAt: '2026-08-25',
     resolutionNote: '480P/768P are native; 2K/4K are upscaled from the 768P base.',
   },
+  {
+    key: 'minimax-hailuo-02',
+    provider: 'minimax-direct',
+    providerLabel: 'MiniMax Direct',
+    providerSecretName: 'MINIMAX_API_KEY',
+    name: 'MiniMax Hailuo 02',
+    maker: 'MiniMax',
+    shortName: 'Hailuo 02',
+    description: 'Direct MiniMax video generation with camera-command control and first/last frames.',
+    recommendedFor: 'Using a MiniMax Platform account directly, without routing this model through fal.ai.',
+    durationOptions: [6, 10],
+    defaultDuration: 6,
+    resolutions: [
+      { value: '768P', label: '768P · Standard' },
+      { value: '1080P', label: '1080P · 6s only' },
+    ],
+    defaultResolution: '768P',
+    aspectRatios: modelDefaultAspectOption,
+    defaultAspectRatio: 'auto',
+    audio: 'unsupported',
+    audioDescription: 'The documented Hailuo 02 video endpoint does not return native audio.',
+    modes: [
+      {
+        key: 'text-to-video',
+        label: 'Text to video',
+        description: 'Generate from a prompt with optional MiniMax camera commands.',
+        endpointId: 'POST api.minimax.io/v1/video_generation',
+        references: noReferences,
+      },
+      {
+        key: 'image-to-video',
+        label: 'Image to video',
+        description: 'Animate a public or base64 first-frame image.',
+        endpointId: 'POST api.minimax.io/v1/video_generation',
+        aspectRatios: sourceAspectOption,
+        resolutions: [
+          { value: '512P', label: '512P · Economy' },
+          { value: '768P', label: '768P · Standard' },
+          { value: '1080P', label: '1080P · 6s only' },
+        ],
+        references: firstFrameReferences,
+        requiresStartImage: true,
+      },
+      {
+        key: 'first-last-frame',
+        label: 'First + last frame',
+        description: 'Interpolate between approved start and end frames.',
+        endpointId: 'POST api.minimax.io/v1/video_generation',
+        aspectRatios: sourceAspectOption,
+        references: firstLastReferences,
+        requiresStartImage: true,
+        requiresEndImage: true,
+      },
+    ],
+    advancedFields: [],
+    capabilities: ['6s or 10s', 'Up to 1080P', 'Camera commands', 'First/last frames'],
+    outputFields: ['Task ID', 'Generation status', 'File ID', 'Download URL'],
+    pricingLabel: '$0.10–$0.56 / video',
+    pricingNote: 'MiniMax Direct pay-as-you-go pricing; Hailuo website credits are separate.',
+    pricingVerifiedAt: '2026-08-25',
+    resolutionNote: '1080P supports 6 seconds only. 10-second generations use 512P or 768P, depending on mode.',
+  },
 ];
 
 export function isStudioVideoModelKey(value: unknown): value is StudioVideoModelKey {
@@ -434,6 +518,19 @@ export function getAspectOptions(
 ) {
   const model = getVideoModel(modelKey);
   return getModelMode(modelKey, mode).aspectRatios ?? model.aspectRatios;
+}
+
+export function getResolutionOptions(
+  modelKey: StudioVideoModelKey,
+  duration: StudioGenerationDuration,
+  mode: StudioGenerationMode,
+) {
+  const model = getVideoModel(modelKey);
+  const options = getModelMode(modelKey, mode).resolutions ?? model.resolutions;
+  if (modelKey === 'minimax-hailuo-02' && duration === 10) {
+    return options.filter((option) => option.value !== '1080P');
+  }
+  return options;
 }
 
 export function createDefaultGenerationConfig(
@@ -478,11 +575,14 @@ export function reconcileGenerationConfig(
   const duration = model.durationOptions.includes(previous.duration)
     ? previous.duration
     : model.defaultDuration;
-  const resolution = model.resolutions.some(
+  const resolutionOptions = getResolutionOptions(model.key, duration, mode.key);
+  const resolution = resolutionOptions.some(
     (option) => option.value === previous.resolution,
   )
     ? previous.resolution
-    : model.defaultResolution;
+    : resolutionOptions.some((option) => option.value === model.defaultResolution)
+      ? model.defaultResolution
+      : resolutionOptions[0].value;
   const aspectRatio = aspects.some(
     (option) => option.value === previous.aspectRatio,
   )
@@ -528,7 +628,10 @@ export function getResolutionLabel(
   resolution: string,
 ) {
   return (
-    getVideoModel(modelKey).resolutions.find(
+    [
+      ...getVideoModel(modelKey).resolutions,
+      ...getVideoModel(modelKey).modes.flatMap((mode) => mode.resolutions ?? []),
+    ].find(
       (option) => option.value === resolution,
     )?.label ?? resolution
   );
@@ -545,7 +648,8 @@ export function estimateGenerationCost(config: StudioGenerationConfig) {
 
   const duration = config.duration;
   let amount = 0;
-  let note = 'Estimated from fal.ai public pricing; final provider charge may vary.';
+  const model = getVideoModel(config.modelKey);
+  let note = `Estimated from ${model.providerLabel} public pricing; final provider charge may vary.`;
 
   switch (config.modelKey) {
     case 'veo-3.1': {
@@ -590,6 +694,18 @@ export function estimateGenerationCost(config: StudioGenerationConfig) {
       }
       break;
     }
+    case 'minimax-hailuo-02': {
+      const prices: Record<string, number> = {
+        '512P:6': 0.1,
+        '512P:10': 0.15,
+        '768P:6': 0.28,
+        '768P:10': 0.56,
+        '1080P:6': 0.49,
+      };
+      amount = prices[`${config.resolution}:${duration}`] ?? 0;
+      note = 'MiniMax Direct API estimate. Hailuo website welcome credits do not apply to API requests.';
+      break;
+    }
   }
 
   return {
@@ -621,6 +737,13 @@ export function validateGenerationConfig(
   const totalReferences = imageUrls.length + videoUrls.length + audioUrls.length;
 
   if (!prompt.trim()) errors.push('Add a scene prompt before generation.');
+  if (
+    config.modelKey === 'minimax-hailuo-02' &&
+    config.duration === 10 &&
+    config.resolution === '1080P'
+  ) {
+    errors.push('MiniMax Hailuo 02 supports 1080P at 6 seconds only.');
+  }
   if (mode.requiresStartImage && !isPublicMediaUrl(config.startImageUrl)) {
     errors.push('Add a valid public start-frame URL for this mode.');
   }

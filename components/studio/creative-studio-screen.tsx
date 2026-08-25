@@ -419,7 +419,7 @@ function StudioPreview({
           ))}
         </div>
         <span className="studio-version-rail__truth">
-          fal.ai preset · {model.name}
+          {model.providerLabel} preset · {model.name}
         </span>
       </div>
     </section>
@@ -611,9 +611,9 @@ function AIDirectorPanel({
         <div className="studio-truth-note">
           <ShieldCheck size={16} aria-hidden="true" />
           <span>
-            <strong>One-provider architecture.</strong> Every model below maps to a
-            verified fal.ai endpoint. This screen validates inputs and estimates
-            cost; a secure server-side FAL_KEY is still required for paid renders.
+            <strong>Primary gateway + one direct exception.</strong> Veo, Kling,
+            Seedance, and H3 use fal.ai. Hailuo 02 uses a separate server-only
+            MiniMax Platform key; no secret is stored in this browser.
           </span>
         </div>
 
@@ -1011,8 +1011,9 @@ export function CreativeStudioScreen() {
           : current,
       );
     }
+    const selectedModel = getVideoModel(scene.generationConfig.modelKey);
     setNotice(
-      `Local workflow simulation queued for ${getVideoModel(scene.generationConfig.modelKey).name}. No paid fal.ai request was sent.`,
+      `Local workflow simulation queued for ${selectedModel.name}. No paid ${selectedModel.providerLabel} request was sent.`,
     );
 
     queueTimerRef.current = window.setTimeout(() => {
