@@ -48,7 +48,7 @@ type NavItem = {
 const primaryNavigation: NavItem[] = [
   { label: 'Command Center', icon: LayoutDashboard, href: '/' },
   { label: 'Campaigns', icon: Gauge, href: '/campaigns/workspace' },
-  { label: 'Studio', icon: Clapperboard },
+  { label: 'Studio', icon: Clapperboard, href: '/studio' },
   { label: 'Brand Vault', icon: Box },
   { label: 'Agents', icon: Bot },
   { label: 'Analytics', icon: BarChart3 },
@@ -160,9 +160,11 @@ function Sidebar({
 export function DashboardShell({
   activeSection,
   children,
+  immersive = false,
 }: {
   activeSection: DashboardSection;
   children: ReactNode;
+  immersive?: boolean;
 }) {
   const router = useRouter();
   const [workspace, setWorkspace] = useState('Workspace Alpha');
@@ -247,7 +249,7 @@ export function DashboardShell({
   }
 
   return (
-    <div className="app-shell">
+    <div className={cx('app-shell', immersive && 'app-shell--immersive')}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -318,14 +320,16 @@ export function DashboardShell({
 
         {children}
 
-        <footer className="app-footer">
-          <span>© 2026 Cinemoriq. Cinematic intelligence, operationalized.</span>
-          <div className="app-footer__trust" aria-label="Product safeguards">
-            <span>Privacy-ready</span>
-            <span>Human-reviewed</span>
-            <span>Secure by design</span>
-          </div>
-        </footer>
+        {!immersive ? (
+          <footer className="app-footer">
+            <span>© 2026 Cinemoriq. Cinematic intelligence, operationalized.</span>
+            <div className="app-footer__trust" aria-label="Product safeguards">
+              <span>Privacy-ready</span>
+              <span>Human-reviewed</span>
+              <span>Secure by design</span>
+            </div>
+          </footer>
+        ) : null}
       </div>
 
       <Drawer

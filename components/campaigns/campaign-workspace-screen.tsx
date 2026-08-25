@@ -504,10 +504,16 @@ export function CampaignWorkspaceScreen() {
             </Button>
             <Button
               variant="primary"
-              disabled
-              title="Analytics arrives in Phase 6"
+              leadingIcon={<Clapperboard size={16} />}
+              onClick={() =>
+                router.push(
+                  record.kind === 'sample'
+                    ? `/studio?demo=${DEMO_CAMPAIGN_ID}`
+                    : `/studio?campaign=${encodeURIComponent(record.id)}`,
+                )
+              }
             >
-              View analytics · Phase 6
+              Open Creative Studio
             </Button>
           </div>
         </header>
