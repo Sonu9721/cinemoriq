@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { CreativeStudioScreen } from '../../components/studio/creative-studio-screen';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'AI Creative Studio — Cinemoriq',
   description:
@@ -10,4 +12,3 @@ export const metadata: Metadata = {
 export default function StudioPage() {
   return <CreativeStudioScreen />;
 }
-

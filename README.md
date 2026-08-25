@@ -2,7 +2,7 @@
 
 Cinemoriq is an AI Creative Operating System for planning campaigns, directing cinematic production, enforcing brand and rights guardrails, and turning campaign inputs into structured briefs.
 
-Private live application: [Cinemoriq Sites](https://cinemoriq-os.plum-jay-8118.chatgpt.site)
+Password-protected live application: [Cinemoriq Sites](https://cinemoriq-os.plum-jay-8118.chatgpt.site)
 
 ## Current product surface
 
@@ -23,6 +23,8 @@ Private live application: [Cinemoriq Sites](https://cinemoriq-os.plum-jay-8118.c
 - Rights and human-review confirmations
 - On-device draft and generated-campaign persistence
 - Responsive desktop, tablet, and mobile experience
+- Single-administrator email/password gate with revocable 12-hour sessions,
+  CSRF protection, and D1-backed brute-force limits
 
 ## Technology
 
@@ -59,8 +61,32 @@ Real generation is enabled only when the matching server-side secret exists:
 
 Keys are never sent to the browser. Hailuo consumer-site welcome credits are
 separate from MiniMax Open Platform API billing and cannot power this backend.
-The current deployment must remain owner-only because generation jobs and private
-media are intentionally scoped to this one-person operating system.
+The Sites project remains publicly reachable at the edge so the custom Cinemoriq
+login can load, but every app page, API, upload, and private media response is
+blocked until the administrator signs in.
+
+## Administrator access
+
+Access control uses three server-side environment values:
+
+- `CINEMORIQ_ADMIN_EMAIL`
+- `CINEMORIQ_ADMIN_PASSWORD_HASH`
+- `CINEMORIQ_SESSION_SECRET`
+
+The password itself is never committed or placed in the hosted source. The local
+recovery copy lives in ignored file `.env.admin-credentials`. To rotate the
+administrator password and invalidate every existing session:
+
+```bash
+npm run auth:rotate
+```
+
+Then copy the three raw `CINEMORIQ_*` values from ignored file
+`.env.admin-hosting-values` into the matching Cinemoriq Sites environment
+variables and redeploy. Do not copy the escaped local hash from `.env.local`.
+Use
+`npm run auth:rotate -- --email=new-admin@example.com` to change the login email
+at the same time. Never use an email-account password as the Cinemoriq password.
 
 For the recommended production path:
 
@@ -100,6 +126,7 @@ Campaign drafts, workspace records, and editable Studio scene sessions still per
 ## Routes
 
 - `/` — Command Center
+- `/login` — Secure administrator sign in
 - `/campaigns/new` — Campaign Creation
 - `/campaigns/workspace` — AI Campaign Workspace
 - `/studio` — AI Creative Studio (open from a specific campaign workspace)

@@ -39,6 +39,7 @@ import type {
   GenerationJobsResponse,
   GenerationJobView,
 } from '../../lib/generation-contract';
+import { cinemoriqFetch } from '../../lib/client-auth';
 import {
   DEMO_CAMPAIGN_ID,
   type CampaignRecord,
@@ -937,7 +938,7 @@ export function CreativeStudioScreen() {
 
   useEffect(() => {
     let active = true;
-    fetch('/api/connections/status', { cache: 'no-store' })
+    cinemoriqFetch('/api/connections/status', { cache: 'no-store' })
       .then((response) => response.json())
       .then((payload) => {
         if (active) setConnections(payload as ConnectionStatusResponse);
@@ -1164,7 +1165,7 @@ export function CreativeStudioScreen() {
         pollTimersRef.current.delete(jobId);
         try {
           const response = await readGenerationResponse(
-            await fetch(`/api/studio/generations/${encodeURIComponent(jobId)}`, {
+            await cinemoriqFetch(`/api/studio/generations/${encodeURIComponent(jobId)}`, {
               cache: 'no-store',
             }),
           );
@@ -1209,7 +1210,7 @@ export function CreativeStudioScreen() {
     let active = true;
     const campaignId = recoveryCampaignId;
     historyCampaignRef.current = campaignId;
-    void fetch(
+    void cinemoriqFetch(
       `/api/studio/generations?campaignId=${encodeURIComponent(campaignId)}`,
       { cache: 'no-store' },
     )
@@ -1437,7 +1438,7 @@ export function CreativeStudioScreen() {
     setNotice(`Submitting ${selectedModel.name} generation with a $${estimate.toFixed(2)} estimate…`);
     try {
       const response = await readGenerationResponse(
-        await fetch('/api/studio/generations', {
+        await cinemoriqFetch('/api/studio/generations', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1503,7 +1504,7 @@ export function CreativeStudioScreen() {
     }
     try {
       const response = await readGenerationResponse(
-        await fetch(
+        await cinemoriqFetch(
           `/api/studio/generations/${encodeURIComponent(version.generationJobId)}/cancel`,
           { method: 'POST' },
         ),
@@ -1546,7 +1547,7 @@ export function CreativeStudioScreen() {
     if (version.generationJobId) {
       try {
         const response = await readGenerationResponse(
-          await fetch(
+          await cinemoriqFetch(
             `/api/studio/generations/${encodeURIComponent(version.generationJobId)}/review`,
             {
               method: 'POST',
@@ -1577,7 +1578,7 @@ export function CreativeStudioScreen() {
     if (version.generationJobId) {
       try {
         const response = await readGenerationResponse(
-          await fetch(
+          await cinemoriqFetch(
             `/api/studio/generations/${encodeURIComponent(version.generationJobId)}/review`,
             {
               method: 'POST',

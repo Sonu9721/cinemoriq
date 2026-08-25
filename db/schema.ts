@@ -94,3 +94,50 @@ export type GenerationJobRow = {
   updated_at: string;
   completed_at: string | null;
 };
+
+export const AUTH_LOGIN_ATTEMPTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS auth_login_attempts (
+    id TEXT PRIMARY KEY,
+    window_started_at INTEGER NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    locked_until INTEGER,
+    updated_at TEXT NOT NULL
+  )
+`;
+
+export const AUTH_LOGIN_ATTEMPTS_LOCK_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_auth_login_attempts_locked_until
+  ON auth_login_attempts(locked_until)
+  WHERE locked_until IS NOT NULL
+`;
+
+export type AuthLoginAttemptRow = {
+  id: string;
+  window_started_at: number;
+  attempt_count: number;
+  locked_until: number | null;
+  updated_at: string;
+};
+
+export const AUTH_SESSIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    revoked_at INTEGER
+  )
+`;
+
+export const AUTH_SESSIONS_EXPIRY_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at
+  ON auth_sessions(expires_at)
+`;
+
+export type AuthSessionRow = {
+  token_hash: string;
+  email: string;
+  created_at: number;
+  expires_at: number;
+  revoked_at: number | null;
+};

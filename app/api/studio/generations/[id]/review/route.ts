@@ -1,4 +1,5 @@
 import { GenerationApiException, assertSameOrigin, jsonError, readLimitedJson } from '../../../../../../lib/server/api-errors';
+import { assertSessionCsrf, requireAuthenticatedRequest } from '../../../../../../lib/server/auth';
 import { reviewGeneration } from '../../../../../../lib/server/generation-service';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +9,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const session = await requireAuthenticatedRequest(request);
     assertSameOrigin(request);
+    assertSessionCsrf(request, session);
     const body = await readLimitedJson(request, 2_048);
     const state = body && typeof body === 'object' ? (body as { state?: unknown }).state : null;
     if (state !== 'approved' && state !== 'changes-requested') {

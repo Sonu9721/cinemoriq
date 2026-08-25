@@ -15,6 +15,7 @@ import type {
   GenerationApiError,
   StudioAssetKind,
 } from '../../lib/generation-contract';
+import { cinemoriqFetch } from '../../lib/client-auth';
 import type { StudioVideoModelKey } from './video-model-catalog';
 import { Button, Input, cx } from '../ui/primitives';
 
@@ -167,7 +168,7 @@ export function AssetUploadField({
         throw new Error(`${label} must be between 2 and 15 seconds.`);
       }
       setState({ phase: 'preparing', fileName: file.name });
-      const initiationResponse = await fetch('/api/studio/uploads', {
+      const initiationResponse = await cinemoriqFetch('/api/studio/uploads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

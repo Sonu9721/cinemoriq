@@ -10,8 +10,10 @@ import {
   Clapperboard,
   Gauge,
   LayoutDashboard,
+  LogOut,
   Menu,
   Settings,
+  ShieldCheck,
   UserCircle,
   X,
   type LucideIcon,
@@ -25,6 +27,7 @@ import {
   type RefObject,
 } from 'react';
 import { useRouter } from 'next/navigation';
+import { cinemoriqFetch } from '../../lib/client-auth';
 import { CinemoriqMark } from '../brand/cinemoriq-mark';
 import { Button, cx } from '../ui/primitives';
 import { Drawer } from '../ui/overlays';
@@ -176,6 +179,8 @@ export function DashboardShell({
   const [roadmapSection, setRoadmapSection] = useState<DashboardSection | null>(
     null,
   );
+  const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -246,6 +251,24 @@ export function DashboardShell({
     }
     setRoadmapSection(item.label);
     setDrawerMode('roadmap');
+  }
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    setLogoutError(null);
+    try {
+      const response = await cinemoriqFetch('/api/auth/logout', {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error('Sign out could not be completed.');
+      }
+      window.location.replace('/login');
+    } catch {
+      setSigningOut(false);
+      setLogoutError('Sign out failed. Refresh Cinemoriq and try again.');
+    }
   }
 
   return (
@@ -356,15 +379,31 @@ export function DashboardShell({
             </p>
           </div>
         ) : drawerMode === 'profile' ? (
-          <div className="drawer-empty-state">
-            <span className="drawer-item__icon">
-              <UserCircle size={20} aria-hidden="true" />
+          <div className="profile-access-card">
+            <span className="drawer-item__icon drawer-item__icon--success">
+              <ShieldCheck size={20} aria-hidden="true" />
             </span>
-            <strong>Creative Director workspace</strong>
-            <p>
-              Profile, team access, and cloud identity controls will arrive with
-              the authentication phase.
-            </p>
+            <div>
+              <strong>Protected administrator session</strong>
+              <p>
+                Password access is active. This device stays signed in for up to
+                12 hours, and signing out revokes this session immediately.
+              </p>
+            </div>
+            {logoutError ? (
+              <p className="profile-access-card__error" role="alert">
+                {logoutError}
+              </p>
+            ) : null}
+            <Button
+              className="profile-access-card__logout"
+              variant="secondary"
+              leadingIcon={<LogOut size={16} aria-hidden="true" />}
+              disabled={signingOut}
+              onClick={handleSignOut}
+            >
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </Button>
           </div>
         ) : (
           <div className="drawer-list">

@@ -5,6 +5,9 @@ export type CinemoriqRuntimeEnv = {
   MEDIA?: R2Bucket;
   FAL_KEY?: string;
   MINIMAX_API_KEY?: string;
+  CINEMORIQ_ADMIN_EMAIL?: string;
+  CINEMORIQ_ADMIN_PASSWORD_HASH?: string;
+  CINEMORIQ_SESSION_SECRET?: string;
 };
 
 export function getRuntimeEnv() {
@@ -18,5 +21,10 @@ export function getConnectionStatus() {
     minimax: Boolean(runtime.MINIMAX_API_KEY?.trim()),
     database: Boolean(runtime.DB),
     mediaStorage: Boolean(runtime.MEDIA),
+    accessControl: Boolean(
+      runtime.CINEMORIQ_ADMIN_EMAIL?.trim() &&
+        runtime.CINEMORIQ_ADMIN_PASSWORD_HASH?.trim() &&
+        runtime.CINEMORIQ_SESSION_SECRET?.trim(),
+    ),
   };
 }

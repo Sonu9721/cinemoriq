@@ -1,12 +1,31 @@
+import { jsonError } from '../../../../../../lib/server/api-errors';
+import { requireAuthenticatedRequest } from '../../../../../../lib/server/auth';
 import { getGenerationJob } from '../../../../../../lib/server/generation-jobs';
 import { getRuntimeEnv } from '../../../../../../lib/server/runtime-env';
 
 export const dynamic = 'force-dynamic';
 
+const privateMediaHeaders = {
+  'Cache-Control': 'private, no-store',
+  Vary: 'Cookie',
+} as const;
+
+function mediaError(
+  status: number,
+  code: string,
+  message: string,
+  retryable: boolean,
+) {
+  return Response.json(
+    { error: { code, message, retryable } },
+    { status, headers: privateMediaHeaders },
+  );
+}
+
 function mediaHeaders(object: R2Object, contentType: string) {
   return new Headers({
     'Accept-Ranges': 'bytes',
-    'Cache-Control': 'private, max-age=3600',
+    ...privateMediaHeaders,
     'Content-Type': contentType,
     ETag: object.httpEtag,
     'X-Content-Type-Options': 'nosniff',
@@ -39,12 +58,31 @@ async function serveMedia(
   const { id } = await context.params;
   const job = await getGenerationJob(id);
   if (!job?.object_key || job.status !== 'succeeded') {
-    return Response.json({ error: { code: 'MEDIA_NOT_FOUND', message: 'Generated media is not available.', retryable: false } }, { status: 404 });
+    return mediaError(
+      404,
+      'MEDIA_NOT_FOUND',
+      'Generated media is not available.',
+      false,
+    );
   }
   const bucket = getRuntimeEnv().MEDIA;
-  if (!bucket) return Response.json({ error: { code: 'STORAGE_NOT_CONFIGURED', message: 'Media storage is unavailable.', retryable: true } }, { status: 503 });
+  if (!bucket) {
+    return mediaError(
+      503,
+      'STORAGE_NOT_CONFIGURED',
+      'Media storage is unavailable.',
+      true,
+    );
+  }
   const head = await bucket.head(job.object_key);
-  if (!head) return Response.json({ error: { code: 'MEDIA_NOT_FOUND', message: 'Generated media is not available.', retryable: false } }, { status: 404 });
+  if (!head) {
+    return mediaError(
+      404,
+      'MEDIA_NOT_FOUND',
+      'Generated media is not available.',
+      false,
+    );
+  }
   const contentType = job.mime_type ?? head.httpMetadata?.contentType ?? 'video/mp4';
   const headers = mediaHeaders(head, contentType);
   const rangeHeader = request.headers.get('range');
@@ -59,18 +97,54 @@ async function serveMedia(
     headers.set('Content-Range', `bytes ${range.start}-${range.end}/${head.size}`);
     if (headOnly) return new Response(null, { status: 206, headers });
     const object = await bucket.get(job.object_key, { range: { offset: range.start, length } });
-    return object ? new Response(object.body, { status: 206, headers }) : new Response(null, { status: 404 });
+    return object
+      ? new Response(object.body, { status: 206, headers })
+      : mediaError(
+          404,
+          'MEDIA_NOT_FOUND',
+          'Generated media is not available.',
+          false,
+        );
   }
   headers.set('Content-Length', String(head.size));
   if (headOnly) return new Response(null, { status: 200, headers });
   const object = await bucket.get(job.object_key);
-  return object ? new Response(object.body, { status: 200, headers }) : new Response(null, { status: 404 });
+  return object
+    ? new Response(object.body, { status: 200, headers })
+    : mediaError(
+        404,
+        'MEDIA_NOT_FOUND',
+        'Generated media is not available.',
+        false,
+      );
 }
 
-export function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  return serveMedia(request, context, false);
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    await requireAuthenticatedRequest(request);
+    return serveMedia(request, context, false);
+  } catch (error) {
+    const response = jsonError(error);
+    response.headers.set('Cache-Control', privateMediaHeaders['Cache-Control']);
+    response.headers.set('Vary', privateMediaHeaders.Vary);
+    return response;
+  }
 }
 
-export function HEAD(request: Request, context: { params: Promise<{ id: string }> }) {
-  return serveMedia(request, context, true);
+export async function HEAD(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    await requireAuthenticatedRequest(request);
+    return serveMedia(request, context, true);
+  } catch (error) {
+    const response = jsonError(error);
+    response.headers.set('Cache-Control', privateMediaHeaders['Cache-Control']);
+    response.headers.set('Vary', privateMediaHeaders.Vary);
+    return response;
+  }
 }

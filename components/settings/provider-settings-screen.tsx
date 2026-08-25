@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Gift,
   KeyRound,
+  LockKeyhole,
   ShieldCheck,
   Workflow,
 } from 'lucide-react';
@@ -18,7 +19,11 @@ import { Button, Card, StatusBadge } from '../ui/primitives';
 
 type ProviderStatus = {
   configured: boolean;
-  maskedSuffix: string | null;
+};
+
+type AccessStatus = {
+  configured: boolean;
+  adminEmail: string | null;
 };
 
 function SecretNameRow({
@@ -57,7 +62,7 @@ function ConnectionState({ status }: { status: ProviderStatus }) {
         <strong>{status.configured ? 'Server secret detected' : 'Not configured'}</strong>
         <small>
           {status.configured
-            ? `Stored outside the browser · ••••${status.maskedSuffix} · provider validates it on first request`
+            ? 'Stored outside the browser · provider validates it on first request'
             : 'No browser-side key is stored'}
         </small>
       </div>
@@ -68,9 +73,11 @@ function ConnectionState({ status }: { status: ProviderStatus }) {
 export function ProviderSettingsScreen({
   falStatus,
   minimaxStatus,
+  accessStatus,
 }: {
   falStatus: ProviderStatus;
   minimaxStatus: ProviderStatus;
+  accessStatus: AccessStatus;
 }) {
   const [copiedSecret, setCopiedSecret] = useState<string | null>(null);
 
@@ -101,6 +108,28 @@ export function ProviderSettingsScreen({
             <ShieldCheck size={13} /> Server-side secrets only
           </StatusBadge>
         </header>
+
+        <section className="access-control-card" aria-labelledby="access-control-title">
+          <span className="access-control-card__icon">
+            <LockKeyhole size={22} aria-hidden="true" />
+          </span>
+          <div className="access-control-card__copy">
+            <p className="workspace-eyebrow">Administrator access</p>
+            <h2 id="access-control-title">Password gate</h2>
+            <p>
+              One administrator credential protects every Cinemoriq page,
+              generation request, upload, and private media response.
+            </p>
+          </div>
+          <div className="access-control-card__status">
+            <StatusBadge tone={accessStatus.configured ? 'success' : 'danger'}>
+              <ShieldCheck size={13} />
+              {accessStatus.configured ? 'Protected' : 'Setup required'}
+            </StatusBadge>
+            <strong>{accessStatus.adminEmail ?? 'No administrator email'}</strong>
+            <small>12-hour revocable sessions · rate-limited login</small>
+          </div>
+        </section>
 
         <section className="provider-grid" aria-label="AI provider connections">
           <Card className="provider-card provider-card--primary">

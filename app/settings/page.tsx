@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { ProviderSettingsScreen } from '../../components/settings/provider-settings-screen';
+import { getAuthConfigurationStatus } from '../../lib/server/auth';
 import { getRuntimeEnv } from '../../lib/server/runtime-env';
 
 export const metadata: Metadata = {
@@ -14,7 +15,6 @@ function getProviderStatus(value: string | undefined) {
   const normalized = value?.trim() ?? '';
   return {
     configured: Boolean(normalized),
-    maskedSuffix: normalized ? normalized.slice(-4) : null,
   };
 }
 
@@ -24,6 +24,7 @@ export default function SettingsPage() {
     <ProviderSettingsScreen
       falStatus={getProviderStatus(runtime.FAL_KEY)}
       minimaxStatus={getProviderStatus(runtime.MINIMAX_API_KEY)}
+      accessStatus={getAuthConfigurationStatus()}
     />
   );
 }
